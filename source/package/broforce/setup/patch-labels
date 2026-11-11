@@ -1,0 +1,25 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 Ronax
+set -euo pipefail
+
+if [ "$1" = --apply ]; then
+    ./setup/asmpatch --only=broforce-prompts "$2" "$3"
+    if [ -n "${BROFORCE_PROMPT_COPY:-}" ]; then
+        assembly="$3/Assembly-CSharp.dll"
+        [ -s "$assembly" ] || assembly="$2/Assembly-CSharp.dll"
+        cp -- "$assembly" "$BROFORCE_PROMPT_COPY"
+    fi
+    exit 0
+fi
+
+# Update an existing runtime without rebuilding the game or touching its saves.
+root=$1
+managed="$root/data/external/il2cpp/Assembly-CSharp.dll"
+pending=
+[ "$BROFORCE_SETUP_ROUTE" != 64 ] || [ ! -s "$managed" ] || pending="$managed.pm-new"
+BROFORCE_PROMPT_COPY="$pending" DOTNET_BUNDLE_EXTRACT_BASE_DIR="$root/.patcher-cache" \
+    DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 ./setup/pmu apk-asmpatch "$root/Broforce.apk" \
+    "$GAMEDIR/.prompt-update-$BROFORCE_SETUP_ROUTE" './setup/patch-labels --apply'
+[ -z "$pending" ] || mv -f -- "$pending" "$managed"
+touch "$root/.prompt-labels"

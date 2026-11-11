@@ -1,0 +1,35 @@
+Drop broforce.zip in the PortMaster autoinstall folder and open PortMaster.
+
+Game Information
+Title: Broforce
+URL: https://store.steampowered.com/app/274190/Broforce/
+
+Instructions:
+In the Steam console, enter download_depot 274190 274193. Copy depot_274193
+to ports/broforce/gamedata and launch Broforce from Ports. First setup needs
+at least 3 GiB of free space. The default render resolution is 75%.
+
+| Control | Action |
+| --- | --- |
+| Left stick | Move |
+| Bottom face button | Jump / Confirm |
+| Left face button | Fire / Join |
+| Start | Pause |
+| Select + Start | Quit |
+
+CFW Tests:
+[ ] muOS (RG34XX SP)
+[ ] Knulli (RG35XX H)
+[ ] R36S firmware
+[ ] AmberELEC
+[ ] dArkOS
+[ ] ROCKNIX (Mali)
+[ ] ROCKNIX (Panfrost)
+
+Resolutions:
+[ ] 480x320
+[ ] 640x480
+[ ] 720x480
+[ ] 720x720
+
+Please include broforce/log.txt and broforce/patchlog.txt for any issue.

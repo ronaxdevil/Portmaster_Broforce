@@ -1,0 +1,7 @@
+/gamefiles/
+/output/
+/reference zip/
+/work/
+/source/portmaster-unity/
+__pycache__/
+*.py[cod]

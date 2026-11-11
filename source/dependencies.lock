@@ -1,0 +1,4 @@
+# Source this file from a POSIX-compatible shell.
+PORTMASTER_UNITY_URL=https://github.com/ronaxdevil/portmaster-unity.git
+PORTMASTER_UNITY_REVISION=ed3d8ccaa941a14ef958872cc8094d56ad2b8fb5
+PORTMASTER_UNITY_PATCH=patches/portmaster-unity-200mb.patch

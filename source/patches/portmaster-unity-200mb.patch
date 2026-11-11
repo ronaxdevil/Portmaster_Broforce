@@ -1,0 +1,59 @@
+diff --git a/setup-rs/crates/androiddata/src/pack.rs b/setup-rs/crates/androiddata/src/pack.rs
+index dca6175..e05f523 100644
+--- a/setup-rs/crates/androiddata/src/pack.rs
++++ b/setup-rs/crates/androiddata/src/pack.rs
+@@ -377,19 +377,21 @@ fn gib(n: f64) -> f64 {
+     n / (1u64 << 30) as f64
+ }
+ 
+-/// What check_space says when the archives (need bytes) would leave less than 1 GiB of free.
++const PACK_SPARE_BYTES: u64 = 200_000_000;
++
++/// What check_space says when the archives would leave less than 200 MB free.
+ fn short_of_space(need: u64, free: u64) -> Option<String> {
+-    (free < need + (1 << 30)).then(|| {
++    (free < need.saturating_add(PACK_SPARE_BYTES)).then(|| {
+         format!(
+-            "pack: the APK and OBB need {:.2} GiB, {:.2} GiB free (keeping 1 GiB spare): free {:.1} GiB more on the card",
++            "pack: the APK and OBB need {:.2} GiB, {:.2} GiB free (keeping 200 MB spare): free {:.2} GiB more on the card",
+             gib(need as f64),
+             gib(free as f64),
+-            gib((need + (1 << 30) - free) as f64)
++            gib((need.saturating_add(PACK_SPARE_BYTES) - free) as f64)
+         )
+     })
+ }
+ 
+-/// Exits NO_SPACE when the archives of these entries would leave less than 1 GiB free.
++/// Exits NO_SPACE when the archives would leave less than 200 MB free.
+ fn check_space(
+     ctx: &mut Ctx,
+     zdir: &str,
+@@ -558,9 +560,9 @@ pub fn pack(ctx: &mut Ctx, survey: &Survey) -> Result<Json, Stop> {
+             need += size_of(s)?;
+         }
+         let free = free_space(&zdir)?;
+-        if free < need + (1 << 30) {
++        if free < need.saturating_add(PACK_SPARE_BYTES) {
+             let m = format!(
+-                "pack: OBB needs {:.2} GiB, only {:.2} GiB free (keeping 1 GiB spare)",
++                "pack: OBB needs {:.2} GiB, only {:.2} GiB free (keeping 200 MB spare)",
+                 gib(need as f64),
+                 gib(free as f64)
+             );
+@@ -736,11 +738,10 @@ mod tests {
+ 
+     #[test]
+     fn space() {
+-        assert_eq!(short_of_space(1 << 30, 3 << 30), None);
+-        assert_eq!(
+-            short_of_space(1_500_000_000, 1 << 30).unwrap(),
+-            "pack: the APK and OBB need 1.40 GiB, 1.00 GiB free (keeping 1 GiB spare): free 1.4 GiB more on the card"
+-        );
++        let need = 60_000_000;
++        assert!(short_of_space(need, need + PACK_SPARE_BYTES - 1).is_some());
++        assert_eq!(short_of_space(need, need + PACK_SPARE_BYTES), None);
++        assert_eq!(short_of_space(need, need + PACK_SPARE_BYTES + 1), None);
+     }
+ 
+     #[test]

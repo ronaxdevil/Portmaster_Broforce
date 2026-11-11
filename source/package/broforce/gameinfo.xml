@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gameList>
+  <game>
+    <path>./Broforce.sh</path>
+    <name>Broforce</name>
+    <desc>Rescue action heroes and blast a path through fully destructible levels in this side-scrolling shooter. Each rescued bro brings a different weapon or special attack.</desc>
+    <releasedate>20151015T000000</releasedate>
+    <developer>Free Lives</developer>
+    <publisher>Devolver Digital</publisher>
+    <genre>Action / Platformer</genre>
+    <image>./broforce/cover.png</image>
+  </game>
+</gameList>

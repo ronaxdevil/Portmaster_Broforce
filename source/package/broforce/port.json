@@ -1,0 +1,40 @@
+{
+  "version": 4,
+  "name": "broforce.zip",
+  "items": [
+    "Broforce.sh",
+    "broforce"
+  ],
+  "items_opt": [],
+  "attr": {
+    "title": "Broforce",
+    "porter": [
+      "Ronax"
+    ],
+    "desc": "A pixel-art run-and-gun platformer with destructible stages and action-movie heroes to rescue.",
+    "desc_md": null,
+    "inst": "Requires the Steam Linux edition of Broforce. Run download_depot 274190 274193 in the Steam console and copy depot_274193 to ports/broforce/gamedata. Launch Broforce to build the game on the handheld. Leave at least 3 GiB free for first-time setup.",
+    "inst_md": null,
+    "genres": [
+      "action",
+      "platformer"
+    ],
+    "image": null,
+    "rtr": false,
+    "exp": false,
+    "runtime": [],
+    "store": [
+      {
+        "name": "Steam",
+        "gameurl": "https://store.steampowered.com/app/274190/Broforce/",
+        "developerurl": "https://freelives.net/"
+      }
+    ],
+    "availability": "paid",
+    "reqs": [],
+    "arch": [
+      "aarch64"
+    ],
+    "min_glibc": "2.30"
+  }
+}

@@ -1,0 +1,149 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 Ronax
+set -euo pipefail
+
+GAMEDIR="$(cd -- "$(dirname -- "$0")/.." && pwd -P)"
+exec > >(tee -a "$GAMEDIR/patchlog.txt") 2>&1
+fail() { printf 'PATCH_FAIL_MSG:%s\nPatching process failed!\n' "$1"; exit 1; }
+step() { printf '\n== %s | %s\n' "$(date '+%F %T')" "$*"; }
+case "${BROFORCE_SETUP_ROUTE:-}" in 32|64) route=$BROFORCE_SETUP_ROUTE ;; *) fail "Start Broforce from the Ports menu." ;; esac
+
+S="$GAMEDIR/setup"
+W="$GAMEDIR/.setup-$route"
+R="$GAMEDIR/game-$route"
+D="$W/Broforce_Data"
+P="$W/player"
+I="$GAMEDIR/gamedata/Broforce_Data"
+[ -e "$I" ] || I="$GAMEDIR/gamedata/depot_274193/Broforce_Data"
+pm() { "$S/pmu" "$@"; }
+save() {
+    printf '%s\n' "$2" > "$1.tmp"
+    mv -f -- "$1.tmp" "$1"
+}
+preference() {
+    [ -s "$1" ] || save "$1" "$2"
+}
+
+[ ! -e "$R" ] && [ ! -L "$R" ] || fail "The destination exists. Back up its saves before renaming it."
+[ ! -L "$W" ] || fail "The setup work folder must be a normal directory."
+step "Broforce desktop build | ARM $route"
+
+if [ ! -f "$W/copied" ]; then
+    [ -f "$I/globalgamemanagers" ] ||
+        fail "Copy Steam's Linux depot_274193 folder to broforce/gamedata."
+    step "Checking the supplied Linux game files"
+    ( cd "$I" && sha256sum -c "$S/linux.sha256" ) ||
+        fail "Unsupported, modified, or incomplete data. Use Steam's Linux depot 274193 listed in broforce.md."
+    free_kb=$(df -Pk "$GAMEDIR" | awk 'NR == 2 {print $4}')
+    [[ "$free_kb" =~ ^[0-9]+$ ]] && [ "$free_kb" -ge 3145728 ] ||
+        fail "Free at least 3 GiB on the card before first-time setup."
+    step "Copying game data into private setup storage"
+    mkdir -p "$W"
+    rm -rf -- "$D"
+    mkdir -- "$D"
+    while IFS= read -r entry; do
+        file=${entry#*  }
+        mkdir -p -- "$D/$(dirname -- "$file")"
+        cp -- "$I/$file" "$D/$file"
+    done < "$S/linux.sha256"
+    ( cd "$D" && sha256sum -c "$S/linux.sha256" ) ||
+        fail "The staged copy did not verify. Recopy the Linux game files and retry."
+    case "$I" in
+        "$GAMEDIR/gamedata/Broforce_Data") save "$W/input-source" direct ;;
+        "$GAMEDIR/gamedata/depot_274193/Broforce_Data") save "$W/input-source" depot ;;
+    esac
+    quality=${TEXTURE_QUALITY:-fastest}
+    case "$quality" in fastest|medium) ;; *) quality=fastest ;; esac
+    save "$W/texture_quality" "$quality"
+    touch "$W/copied"
+fi
+
+quality=$(cat "$W/texture_quality" 2>/dev/null || printf 'fastest')
+case "$quality" in fastest|medium) ;; *) fail "The staged texture setting is invalid." ;; esac
+resolution=${RESOLUTION:-0.75}
+case "$resolution" in device|0.833|0.75|0.5) ;; *) resolution=0.75 ;; esac
+preference "$GAMEDIR/resolution.txt" "$resolution"
+aspect=${ASPECT:-fill}
+case "$aspect" in fill|16:9|4:3|1:1) ;; *) aspect=fill ;; esac
+preference "$GAMEDIR/aspect.txt" "$aspect"
+buttons=${BUTTONS:-nintendo}
+case "$buttons" in nintendo|xbox) ;; *) buttons=nintendo ;; esac
+preference "$GAMEDIR/buttons.txt" "$buttons"
+
+donor="$GAMEDIR/donor"
+if [ "$route" = 32 ]; then
+    unity=2017.4.9f1
+    player_libs="$P/Variations/mono/Release/Libs/armeabi-v7a"
+    player_args=(--apk "$donor/donor-$unity-mono-armv7.apk")
+    mono_args=(--mono-etc "$D/Mono/etc")
+else
+    unity=2017.4.40f1
+    player_libs="$P/Variations/il2cpp/Release/Libs/arm64-v8a"
+    player_args=(--backend il2cpp --abi arm64-v8a --managed
+        --apk "$donor/donor-$unity-il2cpp-arm64.apk" --apk "$donor/donor-$unity-mono-armv7.apk")
+    mono64="$GAMEDIR/setup64/mono64"
+    mono_args=(--mono64 --mono-etc "$mono64/etc")
+    for dll in "$mono64"/classlibs/*.dll; do
+        [ -f "$dll" ] || fail "The ARM64 class libraries are missing. Extract the port ZIP again."
+        mono_args+=(--managed-file "$dll")
+    done
+fi
+
+if [ ! -f "$W/player-ready" ]; then
+    step "Extracting the Unity $unity Android player"
+    rm -rf -- "$P"
+    pm player donor "$unity" "$P" "${player_args[@]}" ||
+        fail "Could not read the Unity donor. Extract the port ZIP again."
+    touch "$W/player-ready"
+fi
+
+if [ ! -f "$W/converted" ]; then
+    step "Converting shaders, settings, audio, and textures"
+    pm convert "$D" --config "$S/convert.json" --set "textures.quality=$quality" ||
+        fail "Conversion stopped. Launch again to resume. See patchlog.txt for details."
+    touch "$W/converted"
+fi
+
+Z="$W/android/zip"
+if [ ! -s "$Z/.ready" ]; then
+    step "Applying managed compatibility patches and packing the runtime"
+    rm -rf -- "$W/android" "$W/managed"
+    mkdir "$W/managed"
+    DOTNET_BUNDLE_EXTRACT_BASE_DIR="$W/dotnet" DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1 \
+        "$S/asmpatch" --only=rewired-android,streaming-assets-all,data-path,broforce-compatibility,broforce-prompts \
+        "$D/Managed" "$W/managed" || fail "The managed compatibility patches could not be applied."
+    for dll in Assembly-CSharp Assembly-CSharp-firstpass BitCode.AssetManagement Sisus.OdinSerializer; do
+        [ -s "$W/managed/$dll.dll" ] || fail "The expected patch for $dll.dll did not match."
+    done
+    patched=()
+    for dll in "$W"/managed/*.dll; do patched+=(--managed-file "$dll"); done
+    pm android-data --src "$D" --pkg "$P" --out "$W/android" \
+        --name Broforce --package org.portmaster.broforce \
+        --streaming-assets loose --data-path "${patched[@]}" "${mono_args[@]}" \
+        --rewired-joysticks 4 --no-video-shader --verify-bundles 2 --pack all ||
+        fail "Packing stopped. Launch again to retry. See patchlog.txt for details."
+
+    mkdir "$Z/lib"
+    cp -- "$player_libs/libmain.so" "$player_libs/libunity.so" "$Z/lib/"
+    if [ "$route" = 32 ]; then
+        cp -- "$P/Variations/mono/Release/MonoLibs/armeabi-v7a/libmono.so" "$Z/lib/"
+        test -s "$Z/main.1.org.portmaster.broforce.obb"
+    else
+        cp -- "$mono64/libil2cpp.so" "$mono64/libmonobdwgc-2.0.so" "$mono64/libMonoPosixHelper.so" "$Z/lib/"
+    fi
+    test -s "$Z/Broforce.apk"
+    test -s "$Z/android_package.json"
+    touch "$Z/.prompt-labels"
+    sync
+    save "$Z/.ready" "broforce-linux-2017.4.7f1-arm$route"
+fi
+step "Installing the runtime"
+save "$Z/texture_quality.txt" "$quality"
+if [ -s "$W/input-source" ]; then cp -- "$W/input-source" "$Z/.input-cleanup"; fi
+sync
+mv -T -- "$Z" "$R"
+sync
+sh "$S/cleanup-input" "$GAMEDIR" "$route" || true
+rm -rf -- "$W"
+step "Setup complete"

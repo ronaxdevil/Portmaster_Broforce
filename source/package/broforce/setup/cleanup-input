@@ -1,0 +1,33 @@
+#!/bin/sh
+# Remove only unchanged, verified setup inputs after the runtime is installed.
+set -eu
+game=$(cd -- "$1" && pwd -P)
+route=$2
+case "$route" in 32|64) ;; *) exit 1 ;; esac
+runtime="$game/game-$route"
+marker="$runtime/.input-cleanup"
+[ -f "$marker" ] && [ ! -L "$marker" ] || exit 0
+[ -s "$runtime/.ready" ] && [ -s "$runtime/Broforce.apk" ] &&
+    [ -s "$runtime/android_package.json" ] && [ -s "$runtime/lib/libunity.so" ] || exit 1
+if [ "$route" = 32 ]; then [ -s "$runtime/main.1.org.portmaster.broforce.obb" ] || exit 1; fi
+case "$(cat "$marker")" in
+    direct) input="$game/gamedata/Broforce_Data" ;;
+    depot) input="$game/gamedata/depot_274193/Broforce_Data" ;;
+    *) exit 1 ;;
+esac
+[ ! -L "$game/gamedata" ] && [ ! -L "$input" ] || exit 1
+[ "$(readlink -f "$input")" = "$(readlink -f "$game/gamedata")/${input#"$game/gamedata/"}" ] || exit 1
+while IFS= read -r entry; do
+    hash=${entry%% *}
+    file=${entry#*  }
+    case "$file" in /*|../*|*/../*|*/..) exit 1 ;; esac
+    path="$input/$file"
+    [ -f "$path" ] || continue
+    [ ! -L "$path" ] || continue
+    [ "$(readlink -f "$path")" = "$input/$file" ] || continue
+    actual=$(sha256sum "$path")
+    [ "${actual%% *}" = "$hash" ] || continue
+    rm -f -- "$path"
+done < "$game/setup/linux.sha256"
+rm -f -- "$marker"
+printf '%s\n' 'Removed unchanged supplied game files after setup; other files were retained.' >> "$game/patchlog.txt"
