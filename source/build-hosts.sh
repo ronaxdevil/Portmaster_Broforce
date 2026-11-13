@@ -4,19 +4,22 @@
 set -euo pipefail
 
 source_dir=$(cd -- "$(dirname -- "$0")" && pwd -P)
-work_dir=$(cd -- "$source_dir/../work" && pwd -P)
+build_dir="$source_dir/.build"
+deps_dir="$source_dir/dependencies"
+mkdir -p "$build_dir"
 : "${UNITY_RUNTIME:?Set UNITY_RUNTIME to the pinned runtime source with libhybris populated}"
 : "${ZIG:?Set ZIG to the path to Zig 0.15.2}"
-export ZIG_GLOBAL_CACHE_DIR="$work_dir/tools/zig-cache"
-export ZIG_LOCAL_CACHE_DIR="$work_dir/tools/zig-local"
+export ZIG_GLOBAL_CACHE_DIR="$build_dir/zig-cache"
+export ZIG_LOCAL_CACHE_DIR="$build_dir/zig-local"
 cd "$UNITY_RUNTIME"
 
 build_host() (
     local arch=$1 target=$2 multi=$3 name=$4
     shift 4
-    local sysroot="$work_dir/tools/apt-$arch/root"
+    export ZIG_LOCAL_CACHE_DIR="$build_dir/zig-local-$arch"
+    local sysroot="$deps_dir/sysroots/$arch"
     local lib="$sysroot/usr/lib/$multi"
-    local out="$work_dir/hosts/$arch"
+    local out="$build_dir/hosts/$arch"
     local hybris=thirdparty/libhybris/hybris
     local flags=(-target "$target" "$@" -O2 -D_GNU_SOURCE -fPIC -I jni -I jni/include
         -isystem "$sysroot/usr/include/$multi" -isystem "$sysroot/usr/include")

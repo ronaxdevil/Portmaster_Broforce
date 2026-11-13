@@ -1,0 +1,226 @@
+{
+  "arm64": {
+    "libdrm-dev": {
+      "Version": "2.4.114-1+b1",
+      "Filename": "pool/main/libd/libdrm/libdrm-dev_2.4.114-1+b1_arm64.deb",
+      "SHA256": "26d7d0dcbbda8ed023b57989e0fca7f0ff8372daaf654daf8b3a362557be5e21"
+    },
+    "libegl-dev": {
+      "Version": "1.6.0-1",
+      "Filename": "pool/main/libg/libglvnd/libegl-dev_1.6.0-1_arm64.deb",
+      "SHA256": "8a3004f892785a5fa4c9f969c116f567a36d1c8e9b3d5fd0403055151e36c7d3"
+    },
+    "libgl-dev": {
+      "Version": "1.6.0-1",
+      "Filename": "pool/main/libg/libglvnd/libgl-dev_1.6.0-1_arm64.deb",
+      "SHA256": "56add9e710c072cf56504beed50a639f9f7c64f4e31e66958fa65a566084888c"
+    },
+    "libgles-dev": {
+      "Version": "1.6.0-1",
+      "Filename": "pool/main/libg/libglvnd/libgles-dev_1.6.0-1_arm64.deb",
+      "SHA256": "941e9963d64479544691f7183fe0eeae32b53b633df71c4c51263517ab2ea8f3"
+    },
+    "libglvnd-dev": {
+      "Version": "1.6.0-1",
+      "Filename": "pool/main/libg/libglvnd/libglvnd-dev_1.6.0-1_arm64.deb",
+      "SHA256": "86cba4e243d10ae07cc6e769f23ecd097b2f87b722dc5ac48a48a3794cd29513"
+    },
+    "libglx-dev": {
+      "Version": "1.6.0-1",
+      "Filename": "pool/main/libg/libglvnd/libglx-dev_1.6.0-1_arm64.deb",
+      "SHA256": "f3d6fca16c259743208df6f845aee3189eb54fed00e159811135089c16d0ad9c"
+    },
+    "libogg-dev": {
+      "Version": "1.3.5-3",
+      "Filename": "pool/main/libo/libogg/libogg-dev_1.3.5-3_arm64.deb",
+      "SHA256": "06a487dd3580ae64134c3a8d3205d5acfff5a749afb165caa6d1bf647304df3d"
+    },
+    "libogg0": {
+      "Version": "1.3.5-3",
+      "Filename": "pool/main/libo/libogg/libogg0_1.3.5-3_arm64.deb",
+      "SHA256": "1a3e6c2a934a4099dcd982785d1563212fc6ad20f021a6f06aa0d6e6582416d3"
+    },
+    "libopenh264-7": {
+      "Version": "2.3.1+dfsg-3+deb12u2",
+      "Filename": "pool/main/o/openh264/libopenh264-7_2.3.1+dfsg-3+deb12u2_arm64.deb",
+      "SHA256": "82cf558f398825b0ecb409385af8a77a90beb601249097d0cacb17640adf444d"
+    },
+    "libopenh264-dev": {
+      "Version": "2.3.1+dfsg-3+deb12u2",
+      "Filename": "pool/main/o/openh264/libopenh264-dev_2.3.1+dfsg-3+deb12u2_arm64.deb",
+      "SHA256": "961d9c9d733902c49a6fd496251633b5e16bcf6c3a4675fba311f89e4015eab6"
+    },
+    "libopus-dev": {
+      "Version": "1.3.1-3",
+      "Filename": "pool/main/o/opus/libopus-dev_1.3.1-3_arm64.deb",
+      "SHA256": "2d55c5f4a0e965f6bd71ed1bb6951ec477b996f65b3830930fe04f2b2fbe6dd7"
+    },
+    "libopus0": {
+      "Version": "1.3.1-3",
+      "Filename": "pool/main/o/opus/libopus0_1.3.1-3_arm64.deb",
+      "SHA256": "a7efb06da15cc7f1ffff62bfdd77ba43f2a2065b8b59185ad1d14031c5a9e354"
+    },
+    "libsdl2-2.0-0": {
+      "Version": "2.26.5+dfsg-1",
+      "Filename": "pool/main/libs/libsdl2/libsdl2-2.0-0_2.26.5+dfsg-1_arm64.deb",
+      "SHA256": "7d875b119108a240015e7739c7a0de402616975281bcd8169cb434326fa93a66"
+    },
+    "libsdl2-dev": {
+      "Version": "2.26.5+dfsg-1",
+      "Filename": "pool/main/libs/libsdl2/libsdl2-dev_2.26.5+dfsg-1_arm64.deb",
+      "SHA256": "b69722e33bdce9102c8608a648a9969c7e9e03bdb9c894f1ba441f9229d3e273"
+    },
+    "libvorbis-dev": {
+      "Version": "1.3.7-1",
+      "Filename": "pool/main/libv/libvorbis/libvorbis-dev_1.3.7-1_arm64.deb",
+      "SHA256": "a00926ab6e347a52be6b07e65354d9b7f11eab6f65575f8bb7353cc60dd8c8b0"
+    },
+    "libvorbis0a": {
+      "Version": "1.3.7-1",
+      "Filename": "pool/main/libv/libvorbis/libvorbis0a_1.3.7-1_arm64.deb",
+      "SHA256": "2f902ae456bcada7b0d494d7bd7c994feb81c4158209d8a12c0b2d9e255edda7"
+    },
+    "libvpx-dev": {
+      "Version": "1.12.0-1+deb12u5",
+      "Filename": "pool/main/libv/libvpx/libvpx-dev_1.12.0-1+deb12u5_arm64.deb",
+      "SHA256": "5d5a046b83e269016eb9ee72ceccb29d65f180467a053439bceb0d2d45bb1560"
+    },
+    "libvpx7": {
+      "Version": "1.12.0-1+deb12u5",
+      "Filename": "pool/main/libv/libvpx/libvpx7_1.12.0-1+deb12u5_arm64.deb",
+      "SHA256": "4932b9515748ca48311e00ca548741aef7822300c9c149c400fd0a7cb0b6c394"
+    },
+    "libwayland-dev": {
+      "Version": "1.21.0-1",
+      "Filename": "pool/main/w/wayland/libwayland-dev_1.21.0-1_arm64.deb",
+      "SHA256": "932405c58195d299495230792e374ad304adadf3d3ffdc07eda3466b756adc33"
+    },
+    "linux-libc-dev": {
+      "Version": "6.1.176-1",
+      "Filename": "pool/main/l/linux/linux-libc-dev_6.1.176-1_arm64.deb",
+      "SHA256": "eeca5ec13bed7206f8171fab9a48e84119dcc20cc79557f104628447a524ad10"
+    },
+    "zlib1g": {
+      "Version": "1:1.2.13.dfsg-1",
+      "Filename": "pool/main/z/zlib/zlib1g_1.2.13.dfsg-1_arm64.deb",
+      "SHA256": "52b8b8a145bbe1956bba82034f77022cbef0c3d0885c9e32d9817a7932fe1913"
+    },
+    "zlib1g-dev": {
+      "Version": "1:1.2.13.dfsg-1",
+      "Filename": "pool/main/z/zlib/zlib1g-dev_1.2.13.dfsg-1_arm64.deb",
+      "SHA256": "afb60f0bae432f2f0edfe2d674e99c1a13a147c9aa2b52f2f23e3df19ece76f5"
+    }
+  },
+  "armhf": {
+    "libdrm-dev": {
+      "Version": "2.4.114-1+b1",
+      "Filename": "pool/main/libd/libdrm/libdrm-dev_2.4.114-1+b1_armhf.deb",
+      "SHA256": "44fd9a9095644751098797046fd0e2a2cb55018b698b80d4e07d046fa95870d7"
+    },
+    "libegl-dev": {
+      "Version": "1.6.0-1",
+      "Filename": "pool/main/libg/libglvnd/libegl-dev_1.6.0-1_armhf.deb",
+      "SHA256": "51a5deb65ec66157ed217a545bf3f2e28f620455e19f4a43761ee0292403243c"
+    },
+    "libgl-dev": {
+      "Version": "1.6.0-1",
+      "Filename": "pool/main/libg/libglvnd/libgl-dev_1.6.0-1_armhf.deb",
+      "SHA256": "6efd4d6ebc2dd24efc840d97bfef3cc7d172797d3b06c70dbcc0e315773315a0"
+    },
+    "libgles-dev": {
+      "Version": "1.6.0-1",
+      "Filename": "pool/main/libg/libglvnd/libgles-dev_1.6.0-1_armhf.deb",
+      "SHA256": "07730e7e37dba80952f45242058762c177df366bbdcde9743fc87be51fc8467b"
+    },
+    "libglvnd-dev": {
+      "Version": "1.6.0-1",
+      "Filename": "pool/main/libg/libglvnd/libglvnd-dev_1.6.0-1_armhf.deb",
+      "SHA256": "777148fac92e053167c879da845501fc945d39176eeca0ab6bb36ebfbb96f1ca"
+    },
+    "libglx-dev": {
+      "Version": "1.6.0-1",
+      "Filename": "pool/main/libg/libglvnd/libglx-dev_1.6.0-1_armhf.deb",
+      "SHA256": "d8a793e77e430aa3f3795c3536ebffac87703dec8a01ceac72117c992308264f"
+    },
+    "libogg-dev": {
+      "Version": "1.3.5-3",
+      "Filename": "pool/main/libo/libogg/libogg-dev_1.3.5-3_armhf.deb",
+      "SHA256": "45630fe7fffe42cbe6d5bfc338791556609d22316821ca59464aab5304c26f53"
+    },
+    "libogg0": {
+      "Version": "1.3.5-3",
+      "Filename": "pool/main/libo/libogg/libogg0_1.3.5-3_armhf.deb",
+      "SHA256": "3be882318671fcb7dddd8f0578f1592548c5ff499a9d9e0ae32c201fe5966168"
+    },
+    "libopenh264-7": {
+      "Version": "2.3.1+dfsg-3+deb12u2",
+      "Filename": "pool/main/o/openh264/libopenh264-7_2.3.1+dfsg-3+deb12u2_armhf.deb",
+      "SHA256": "082779b684f0fef3ac128fed58f7c7d4295b8263f5924e996f94fb411b37c88a"
+    },
+    "libopenh264-dev": {
+      "Version": "2.3.1+dfsg-3+deb12u2",
+      "Filename": "pool/main/o/openh264/libopenh264-dev_2.3.1+dfsg-3+deb12u2_armhf.deb",
+      "SHA256": "9c81fcc62d2f6a3b76ba3b2c99da23403fb24420f507cbd0ea48ceced8122d4e"
+    },
+    "libopus-dev": {
+      "Version": "1.3.1-3",
+      "Filename": "pool/main/o/opus/libopus-dev_1.3.1-3_armhf.deb",
+      "SHA256": "a3503bab0bdc32cbbaf5f2d79c3cd3bde8de424e656acc7f05acd24a2f0b14fe"
+    },
+    "libopus0": {
+      "Version": "1.3.1-3",
+      "Filename": "pool/main/o/opus/libopus0_1.3.1-3_armhf.deb",
+      "SHA256": "9decf188fb6e02ac79d180a1dbab463a28c755a75d6471a0e32de31e0a9b4160"
+    },
+    "libsdl2-2.0-0": {
+      "Version": "2.26.5+dfsg-1",
+      "Filename": "pool/main/libs/libsdl2/libsdl2-2.0-0_2.26.5+dfsg-1_armhf.deb",
+      "SHA256": "b76abdb214e7213a1ea6542dd618c940d3b5601c14dcf88577db1d13d6a80ec7"
+    },
+    "libsdl2-dev": {
+      "Version": "2.26.5+dfsg-1",
+      "Filename": "pool/main/libs/libsdl2/libsdl2-dev_2.26.5+dfsg-1_armhf.deb",
+      "SHA256": "a3e7c33450966cbb744b4e6a8f45160f8df6934826ae5a59571aa34639e0cbce"
+    },
+    "libvorbis-dev": {
+      "Version": "1.3.7-1",
+      "Filename": "pool/main/libv/libvorbis/libvorbis-dev_1.3.7-1_armhf.deb",
+      "SHA256": "7faf4fa4f39f99b28aaf9aa1214c99b70cd16e945acde9b2b0b3424c6e2b2e8d"
+    },
+    "libvorbis0a": {
+      "Version": "1.3.7-1",
+      "Filename": "pool/main/libv/libvorbis/libvorbis0a_1.3.7-1_armhf.deb",
+      "SHA256": "74530e3889e04cab08751aad1f53f510f9db63077bb32bcaff6748bc23d30d45"
+    },
+    "libvpx-dev": {
+      "Version": "1.12.0-1+deb12u5",
+      "Filename": "pool/main/libv/libvpx/libvpx-dev_1.12.0-1+deb12u5_armhf.deb",
+      "SHA256": "968414a09718458e42d48253b83de5ca8a53561bd9627351ed9618c95fb24bf7"
+    },
+    "libvpx7": {
+      "Version": "1.12.0-1+deb12u5",
+      "Filename": "pool/main/libv/libvpx/libvpx7_1.12.0-1+deb12u5_armhf.deb",
+      "SHA256": "8311d38e91b3fb475025fad1c76d10ce7e85c799a7be32e371879a1e1775f109"
+    },
+    "libwayland-dev": {
+      "Version": "1.21.0-1",
+      "Filename": "pool/main/w/wayland/libwayland-dev_1.21.0-1_armhf.deb",
+      "SHA256": "74d7201dc1ca89e9b869559fb372d4f01689102d7c7df0116715c4b308bff996"
+    },
+    "linux-libc-dev": {
+      "Version": "6.1.176-1",
+      "Filename": "pool/main/l/linux/linux-libc-dev_6.1.176-1_armhf.deb",
+      "SHA256": "5641c2f8c252bacc210abb9456deb4344357ccf32ca5821cb8ffe3a9a193a1fb"
+    },
+    "zlib1g": {
+      "Version": "1:1.2.13.dfsg-1",
+      "Filename": "pool/main/z/zlib/zlib1g_1.2.13.dfsg-1_armhf.deb",
+      "SHA256": "b52fcc443085ff9c676648b4d0fc97cd31b8f119bdd4e7534e50b6e9386502ba"
+    },
+    "zlib1g-dev": {
+      "Version": "1:1.2.13.dfsg-1",
+      "Filename": "pool/main/z/zlib/zlib1g-dev_1.2.13.dfsg-1_armhf.deb",
+      "SHA256": "4fbb63530bb52324d74f42f6d69b6b1c6e3c09bd2cb84cecc121f688191e04f5"
+    }
+  }
+}

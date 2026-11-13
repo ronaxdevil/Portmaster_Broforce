@@ -1,49 +1,33 @@
 # Broforce PortMaster build source
 
-`package/` holds the launcher, setup scripts and metadata. `BroforceCompatibility.cs` and `BroforcePrompts.cs` add game-specific patches to the reference assembly patcher. The SHA-256 manifest identifies the accepted Steam Linux depot files. The original desktop game files are needed at installation time.
+Build the BYO-data Broforce port on x86-64 Linux or Windows with WSL. The build produces `../output/broforce.zip` and an unpacked PortMaster submission staging folder. It does not require a copy of Broforce: the player supplies the supported Steam Linux game files when installing the port.
 
-## Build on Linux or WSL
+## Build
 
-Use Python 3.11 or later, the .NET 8 SDK, a Rust toolchain with the `aarch64-unknown-linux-musl` target, a host C compiler, and the AArch64 musl GCC cross tools on `PATH`. Install UnityPy 1.25.4 and set `PMU_TPK` to its `resources/lzma.tpk`. Set `CARGO_HOME` to the intended crate cache if you use a portable Rust installation.
-
-PortMaster Unity is an external dependency and is not included in this repository. `dependencies.lock` pins the requested [ronaxdevil/portmaster-unity](https://github.com/ronaxdevil/portmaster-unity) revision; the fetch script checks it out, applies the tracked 200 MB packing-reserve patch, and initializes its submodule. Existing checkouts at a different revision or with conflicting changes are left for manual review. Keep the supplied Cuphead ZIP version `2026.11.01.2` in `../reference zip/cuphead.zip`. The packager checks its SHA-256 and reuses its donor applications and Mono ARM64 bridge with the corresponding notices.
-
-The updated ARM hosts use the same pinned runtime source, including its libhybris submodule at
-`7079712a42ea2754adf747e70c6cc75764c8596e`. Set `UNITY_RUNTIME` to the absolute path to that
-source tree's `runtime` directory and `ZIG` to Zig 0.15.2. Extract Debian Bookworm's ARM runtime
-and development packages into `../work/tools/apt-armhf/root` and `../work/tools/apt-arm64/root`.
-Both roots need `libsdl2-dev`, `libvpx-dev`, `libvorbis-dev`, `libogg-dev`, `libopus-dev`,
-`libopenh264-dev`, `libegl-dev`, `libgles-dev`, `libgl-dev`, `zlib1g-dev`, and `linux-libc-dev` and
-their runtime dependencies. The compiler targets glibc 2.35 for ARMv7 and 2.30 for AArch64.
+Install Git, curl, tar, xz, dpkg-deb, Python 3.11 or newer, GCC, G++, Make, and Docker with ARM64 container support. Start Docker before building. On Debian or Ubuntu, the non-Docker tools can be installed with:
 
 ```bash
-bash fetch-dependencies.sh
-bash build-tools.sh
-bash build-hosts.sh
-python3 notices.py "${CARGO_HOME:-$HOME/.cargo}" ../work/notices \
-  --rust-licenses "$(rustc --print sysroot)/share/doc/rust/licenses" \
-  --dotnet-runtime ../work/tools/nuget/microsoft.netcore.app.runtime.linux-arm64/8.0.33
-python3 build.py \
-  --pmu ../work/tools/rust-target/aarch64-unknown-linux-musl/release/pmu \
-  --asmpatch ../work/tools/asmpatch-arm64/asmpatch \
-  --notices ../work/notices
+sudo apt install git curl tar xz-utils dpkg-dev python3 build-essential
 ```
 
-This writes the Cuphead-style install archive `broforce.zip` and the PortMaster review tree
-`broforce-submission.zip` under `../output`. The submission archive has a top-level README,
-artwork, XML and metadata beside the launcher. Both archives use the same payload.
+From this directory, run:
 
-The Broforce port code is MIT-licensed under Copyright (c) 2026 Ronax. The packaged licenses
-also credit the upstream authors of the shipped donors, runtime hosts, managed patcher and converter.
-The packager selects reference notices by name, and `notices.py` derives the Rust list from the
-ARM64 release target. Pass the .NET runtime pack used to publish the patcher when regenerating notices.
+```bash
+bash build.sh
+```
 
-The gameplay image uses the RG34XX SP capture `../work/device-level-start.png` at its original
-size with 30 pixels of black padding at the top and bottom. The cover uses the title artwork
-from `../work/device-full-panel.png`.
+The first build downloads its pinned dependencies and may take substantial time and disk space. Downloads are stored in `dependencies/`; generated objects and the unpacked submission staging folder are in `.build/`. Both folders are ignored by Git. The resulting port ZIP contains the files needed for offline setup on a handheld.
 
-The reference's donor apps contain Unity players. Broforce's desktop player binaries, original assemblies, bundles, textures and saves are supplied by the owner and processed locally. Steam returns the normal unavailable result on the port. After successful device setup, unchanged game input files listed in the manifest are removed from `gamedata`; retain an independent backup.
+The build fetches [ronaxdevil/portmaster-unity](https://github.com/ronaxdevil/portmaster-unity) at the revision in `dependencies.lock`, initializes its libhybris submodule, and applies the tracked packaging-space and Mono build patches. Existing conflicting checkouts are not reset. `sysroots.lock.json` pins the Debian ARM packages; the fetcher checks the downloaded archives against their hashes.
 
-For the supplied ZIP, `pmu` was built with Rust 1.99.1 and the portable AArch64 musl GCC cross toolchain. The current converter handles all serialized files in a UnityFS scene bundle. The reference ZIP's older converter skipped such bundles. The managed patcher was built with .NET SDK 8.0.427 and Mono.Cecil 0.11.6.
+The Unity Android players are carried in small donor APKs built using the corresponding Unity editor versions, rather than downloaded as standalone APKs from Unity. For now, the build downloads the published [Cuphead 2026.11.01.2 release](https://github.com/wild1walker/portmaster-cuphead/releases/tag/2026.11.01.2), verifies its SHA-256, and takes only the three donor APKs from it. Those donors match the files used by the tested Broforce release. No Cuphead or Broforce game data is included.
 
-The reference projects are [PortMaster Unity](https://github.com/ronaxdevil/portmaster-unity) and [PortMaster Cuphead](https://github.com/wild1walker/portmaster-cuphead).
+The 64-bit bridge is built from the pinned PortMaster Unity source. The Mono runtime and class libraries are built from Unity's MIT-licensed Mono source at the revision in `dependencies.lock`. The ARM64 Docker builds fetch their source dependencies into the ignored `dependencies/mono64/` directory; Docker also downloads its build images. ARM64 emulation makes this substantially slower on an x86-64 machine.
+
+The build downloads pinned versions of Rust, the ARM musl cross-compiler, Zig, .NET, UnityPy's class database, and the two ARM sysroots into `dependencies/`. The Git source includes the Broforce compatibility and button-label patches, launcher, setup scripts, metadata, artwork, and licenses.
+
+## Installation notes
+
+The player supplies the exact Steam Linux data identified by `package/broforce/setup/linux.sha256`. After successful device setup, unchanged game-input files listed in that manifest are removed from `gamedata`; keep an independent backup. Saves are stored in the built game directory. See the port README packaged in the ZIP for installation and controls.
+
+Broforce port code is MIT licensed under Copyright (c) 2026 Ronax. The port also includes the relevant upstream component notices.

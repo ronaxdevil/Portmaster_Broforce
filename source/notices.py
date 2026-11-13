@@ -17,7 +17,7 @@ def main():
     parser.add_argument("--rust-licenses", type=Path)
     parser.add_argument("--dotnet-runtime", type=Path, required=True)
     args = parser.parse_args()
-    rust = Path(__file__).resolve().parent / "portmaster-unity/setup-rs"
+    rust = Path(__file__).resolve().parent / "dependencies/portmaster-unity/setup-rs"
     locked = tomllib.loads((rust / "Cargo.lock").read_text(encoding="utf-8"))["package"]
     tree = subprocess.check_output(
         ["cargo", "tree", "--offline", "--locked", "-p", "pmu", "--target",

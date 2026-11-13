@@ -2,3 +2,6 @@
 PORTMASTER_UNITY_URL=https://github.com/ronaxdevil/portmaster-unity.git
 PORTMASTER_UNITY_REVISION=ed3d8ccaa941a14ef958872cc8094d56ad2b8fb5
 PORTMASTER_UNITY_PATCH=patches/portmaster-unity-200mb.patch
+PORTMASTER_UNITY_MONO_PATCH=patches/portmaster-unity-mono-cache-path.patch
+PORTMASTER_UNITY_MONO_CLASSLIB_PATCH=patches/portmaster-unity-mono-classlib-tests.patch
+MONO_REVISION=538d2255088694b8d0fe78b2280a71b1b7bd94c3

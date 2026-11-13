@@ -3,5 +3,7 @@
 /reference zip/
 /work/
 /source/portmaster-unity/
+/source/dependencies/
+/source/.build/
 __pycache__/
 *.py[cod]

@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: 2026 Ronax
-"""Package the source, public compatibility tools, and the reference's donor apps."""
+"""Package the built port, source-built Mono, and temporarily supplied donor apps."""
 
 import argparse
 import hashlib
-import io
 from pathlib import Path
 import stat
+import tempfile
 import zipfile
 
 
 SOURCE = Path(__file__).resolve().parent
 PROJECT = SOURCE.parent
-REFERENCE_HASH = "b9594262cce9cccd9d27bceae9cde75a3bccbbe3759b5ee459850e1fe240fce7"
+REFERENCE_HASH = "8b7737101a423ad658c12855a67e4407492a79f3af5fb72b2674fcaa9fa0be4d"
 DONORS = (
     "donor-2017.4.9f1-mono-armv7.apk",
     "donor-2017.4.40f1-mono-armv7.apk",
     "donor-2017.4.40f1-il2cpp-arm64.apk",
 )
-REFERENCE_NOTICES = (
+COMPONENT_NOTICES = (
     "LICENSE.astc-encoder.txt",
     "LICENSE.bdwgc.txt",
     "LICENSE.libhybris.txt",
@@ -31,6 +31,11 @@ REFERENCE_NOTICES = (
     "LICENSE.pillow.txt",
     "LICENSE.texture2ddecoder.txt",
     "LICENSE.unitypy.txt",
+    "LICENSE.unity-donor.txt",
+)
+MONO_CLASSLIBS = (
+    "mscorlib.dll", "System.dll", "System.Core.dll", "System.Xml.dll",
+    "Mono.Security.dll", "System.Configuration.dll", "System.Security.dll", "Mono.Posix.dll",
 )
 GENERATED_NOTICES = (
     "LICENSE.dotnet-runtime.txt",
@@ -76,18 +81,20 @@ def write_package(destination, entries):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--reference", type=Path, default=PROJECT / "reference zip/cuphead.zip")
-    parser.add_argument("--pmu", type=Path, required=True)
-    parser.add_argument("--asmpatch", type=Path, required=True)
-    parser.add_argument("--hosts", type=Path, default=PROJECT / "work/hosts")
-    parser.add_argument("--notices", type=Path, required=True)
+    parser.add_argument("--reference", type=Path, default=SOURCE / "dependencies/cuphead-2026.11.01.2.zip")
+    parser.add_argument("--pmu", type=Path, default=SOURCE / ".build/rust-target/aarch64-unknown-linux-musl/release/pmu")
+    parser.add_argument("--asmpatch", type=Path, default=SOURCE / ".build/asmpatch-arm64/asmpatch")
+    parser.add_argument("--hosts", type=Path, default=SOURCE / ".build/hosts")
+    parser.add_argument("--notices", type=Path, default=SOURCE / ".build/notices")
+    parser.add_argument("--mono", type=Path, default=SOURCE / "dependencies/mono64/out/unity-2017.4-mbe")
+    parser.add_argument("--mono-bridge", type=Path, default=SOURCE / "dependencies/portmaster-unity/runtime/mono64/out/arm64/libil2cpp_mono.so")
     parser.add_argument("--output", type=Path, default=PROJECT / "output/broforce.zip")
-    parser.add_argument("--submission", type=Path, default=PROJECT / "output/broforce-submission.zip")
+    parser.add_argument("--submission", type=Path, default=SOURCE / ".build/submission")
     args = parser.parse_args()
 
     with args.reference.open("rb") as reference:
         if hashlib.file_digest(reference, "sha256").hexdigest() != REFERENCE_HASH:
-            parser.error("the Cuphead reference ZIP does not match the pinned 2026.11.01.2 build")
+            parser.error("the Cuphead dependency does not match the pinned official 2026.11.01.2 release")
     pmu = args.pmu.read_bytes()
     asmpatch = args.asmpatch.read_bytes()
     if not arm_elf(pmu, 183) or not arm_elf(asmpatch, 183):
@@ -107,7 +114,7 @@ def main():
     entries["broforce/setup/asmpatch"] = (asmpatch, True)
     entries["broforce/licenses/LICENSE.broforce-port.txt"] = ((SOURCE / "LICENSE").read_bytes(), False)
     entries["broforce/licenses/LICENSE.portmaster-unity.txt"] = (
-        (SOURCE / "portmaster-unity/LICENSE").read_bytes(), False
+        (SOURCE / "dependencies/portmaster-unity/LICENSE").read_bytes(), False
     )
     for host, arch, machine in (("ua_host", "armhf", 40), ("ua_host64", "arm64", 183)):
         binary = (args.hosts / arch / host).read_bytes()
@@ -117,18 +124,23 @@ def main():
     with zipfile.ZipFile(args.reference) as ref:
         for name in DONORS:
             entries[f"broforce/donor/{name}"] = (ref.read(f"cuphead/donor/{name}"), False)
-        for name in REFERENCE_NOTICES:
-            entries[f"broforce/licenses/{name}"] = (ref.read(f"cuphead/licenses/{name}"), False)
-        donor_notice = ref.read("cuphead/licenses/LICENSE.unity-donor.txt")
-        entries["broforce/licenses/LICENSE.unity-donor.txt"] = (
-            donor_notice.replace(b"for this port: a game of pong", b"by the PortMaster Unity project: a game of pong")
-            .replace(b"run the player's own copy of Cuphead", b"run the player's own copy of Broforce"),
-            False,
-        )
-        with zipfile.ZipFile(io.BytesIO(ref.read("cuphead/setup64/setup64.zip"))) as mono:
-            for name in sorted(mono.namelist()):
-                if name.startswith("mono64/") and not name.endswith("/"):
-                    entries[f"broforce/setup64/{name}"] = (mono.read(name), False)
+    for name in COMPONENT_NOTICES:
+        entries[f"broforce/licenses/{name}"] = ((SOURCE / "component-licenses" / name).read_bytes(), False)
+    for source_path, name in (
+        (args.mono_bridge, "libil2cpp.so"),
+        (args.mono / "libmonobdwgc-2.0.so", "libmonobdwgc-2.0.so"),
+        (args.mono / "libMonoPosixHelper.so", "libMonoPosixHelper.so"),
+    ):
+        data = source_path.read_bytes()
+        if not arm_elf(data, 183):
+            parser.error(f"invalid ARM64 Mono library: {source_path}")
+        entries[f"broforce/setup64/mono64/{name}"] = (data, False)
+    for name in MONO_CLASSLIBS:
+        path = args.mono / "classlibs" / name
+        entries[f"broforce/setup64/mono64/classlibs/{name}"] = (path.read_bytes(), False)
+    for name in ("mono/config", "mono/4.5/machine.config"):
+        path = args.mono / "classlibs/etc" / name
+        entries[f"broforce/setup64/mono64/etc/{name}"] = (path.read_bytes(), False)
     for path in notices:
         entries[f"broforce/licenses/{path.name}"] = (path.read_bytes(), False)
     for path in sorted((SOURCE / "host-licenses").glob("LICENSE.*.txt")):
@@ -142,7 +154,14 @@ def main():
     submission["port/broforce/testing_thread.txt"] = (
         (SOURCE / "testing_thread.txt").read_bytes(), False
     )
-    write_package(args.submission, submission)
+    args.submission.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix="staging-", dir=args.submission))
+    for name, (data, executable) in submission.items():
+        target = staging / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        target.chmod(0o755 if executable else 0o644)
+    print(f"Submission staging: {staging / 'port/broforce'}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,9 @@
+diff --git a/tools/mono64/build-classlibs.sh b/tools/mono64/build-classlibs.sh
+--- a/tools/mono64/build-classlibs.sh
++++ b/tools/mono64/build-classlibs.sh
+@@ -60,3 +60,5 @@
+   echo "$B: mono $REF" | dr "cat > /b/src/.fetched"
+ fi
++# The source archive excludes tests, but BDWGC's Makefile.am includes this.
++dr "mkdir -p /b/src/external/bdwgc/tests; echo '# tests excluded from this source build' > /b/src/external/bdwgc/tests/tests.am"
+ CV=$(dr 'cd /b/src && V=$(sed -n "s/^AC_INIT(mono, \[\([0-9.]*\)\].*/\1/p" configure.ac) && C=$(sed -n "s/^MONO_CORLIB_COUNTER=//p" configure.ac) && IFS=. read a b c <<< "$V" && printf "1%02d%02d%02d%03d" $a $b ${c:-0} ${C:-0}')

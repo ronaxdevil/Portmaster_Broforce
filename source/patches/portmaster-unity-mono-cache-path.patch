@@ -1,0 +1,28 @@
+diff --git a/tools/mono64/build-classlibs.sh b/tools/mono64/build-classlibs.sh
+index a8b742c..31bf0ad 100755
+--- a/tools/mono64/build-classlibs.sh
++++ b/tools/mono64/build-classlibs.sh
+@@ -36,7 +36,7 @@ commit() { curl -sfL "https://api.github.com/repos/$1/commits/$2" | "$PY" -I -c
+ docker image inspect ua-build-arm64 >/dev/null 2>&1 || docker build --platform linux/arm64 -t ua-build-arm64 "$PU/runtime/docker/arm64"
+ docker image inspect ua-mono64-build >/dev/null 2>&1 || docker build --platform linux/arm64 -t ua-mono64-build "$HERE"
+ dr() { docker run --rm -i --platform linux/arm64 -v "$VOL":/b ua-mono64-build bash -c "$1"; }
+-docker volume create "$VOL" >/dev/null
++case "$VOL" in /*) mkdir -p "$VOL" ;; *) docker volume create "$VOL" >/dev/null ;; esac
+ # the runtime's commit (build-mono.sh's SOURCE.txt), so runtime and class libraries are one tree
+ REF=${MONO_REF:-$(sed -n 's/^[^:]*: mono \([0-9a-f]*\),.*/\1/p' "$W/src/$B/.fetched" 2>/dev/null || true)}
+ if ! dr "test -f /b/src/.fetched"; then
+diff --git a/tools/mono64/build-mono.sh b/tools/mono64/build-mono.sh
+index f32aa30..382b402 100755
+--- a/tools/mono64/build-mono.sh
++++ b/tools/mono64/build-mono.sh
+@@ -79,7 +79,9 @@ fi
+ cp "$D/.fetched" "$W/out/$B/SOURCE.txt"         # which commits the libraries were built from
+ docker image inspect ua-build-arm64 >/dev/null 2>&1 || docker build --platform linux/arm64 -t ua-build-arm64 "$PU/runtime/docker/arm64"
+ docker image inspect ua-mono64-build >/dev/null 2>&1 || docker build --platform linux/arm64 -t ua-mono64-build "$HERE"
+-docker run --rm --platform linux/arm64 -v ua-mono64:/b -v "$D":/src:ro -v "$W/out/$B":/out ua-mono64-build bash -c '
++MONO64_RUNTIME_VOLUME=${MONO64_RUNTIME_VOLUME:-ua-mono64}
++case "$MONO64_RUNTIME_VOLUME" in /*) mkdir -p "$MONO64_RUNTIME_VOLUME" ;; esac
++docker run --rm --platform linux/arm64 -v "$MONO64_RUNTIME_VOLUME":/b -v "$D":/src:ro -v "$W/out/$B":/out ua-mono64-build bash -c '
+ set -e
+ B='"$B"'
+ [ -f /b/$B/.copied ] || { rm -rf /b/$B; mkdir -p /b/$B; cp -a /src/. /b/$B/; touch /b/$B/.copied; }
