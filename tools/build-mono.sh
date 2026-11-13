@@ -3,8 +3,9 @@
 set -euo pipefail
 source_dir=$(cd -- "$(dirname -- "$0")" && pwd -P)
 source "$source_dir/dependencies.lock"
-unity="$source_dir/dependencies/portmaster-unity"
-mono="$source_dir/dependencies/mono64"
+build_tools="$source_dir/dependencies"
+unity="$build_tools/portmaster-unity"
+mono="$build_tools/mono64"
 mkdir -p "$mono/runtime-cache" "$mono/classlib-cache"
 command -v docker >/dev/null || { echo "Docker is required to build Mono." >&2; exit 1; }
 docker info >/dev/null 2>&1 || { echo "Start Docker before building Mono." >&2; exit 1; }

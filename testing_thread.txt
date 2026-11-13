@@ -7,7 +7,7 @@ URL: https://store.steampowered.com/app/274190/Broforce/
 Instructions:
 In the Steam console, enter download_depot 274190 274193. Copy depot_274193
 to ports/broforce/gamedata and launch Broforce from Ports. First setup needs
-at least 3 GiB of free space. The default render resolution is 75%.
+at least 4.5 GiB of free space. The default render resolution is 75%.
 
 | Control | Action |
 | --- | --- |

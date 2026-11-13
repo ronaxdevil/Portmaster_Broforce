@@ -26,4 +26,4 @@ bash "$source_dir/build-mono.sh"
 python3 "$source_dir/notices.py" "$CARGO_HOME" "$build/notices" \
     --rust-licenses "$(rustc --print sysroot)/share/doc/rust/licenses" \
     --dotnet-runtime "$build/nuget/microsoft.netcore.app.runtime.linux-arm64/8.0.33"
-python3 "$source_dir/build.py" --output "${BROFORCE_OUTPUT:-$source_dir/../output/broforce.zip}"
+python3 "$source_dir/build.py" --output "${BROFORCE_OUTPUT:-$source_dir/../../output/broforce.zip}"

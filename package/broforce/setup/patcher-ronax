@@ -1,0 +1,57 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 Ronax
+
+run_ronax_patcher() {
+    local upstream="$controlfolder/utils/patcher"
+    local patched="$GAMEDIR/.patcher-ronax"
+    local staging="$GAMEDIR/.patcher-ronax.new"
+    local patch_revision=2
+    local patch_signature
+    local source_hash
+    local status
+
+    if [ ! -s "$upstream/main.lua" ]; then
+        pm_message "Update PortMaster before setting up Broforce. Its patcher files are missing."
+        return 1
+    fi
+
+    source_hash=$(sha256sum "$upstream/main.lua" | awk 'NR == 1 {print $1; found=1} END {if (!found) exit 1}') || return 1
+    patch_signature="$patch_revision:$source_hash"
+    if [ "$(cat "$patched/.source-sha256" 2>/dev/null)" != "$patch_signature" ]; then
+        rm -rf -- "$staging"
+        cp -R -- "$upstream" "$staging" || return 1
+
+        if grep -Fq 'Cybion' "$staging/main.lua"; then
+            sed -i 's/Cybion/Ronax/g' "$staging/main.lua" || {
+                rm -rf -- "$staging"
+                return 1
+            }
+        elif ! grep -Fq 'Talkies.say("Ronax"' "$staging/main.lua"; then
+            rm -rf -- "$staging"
+            pm_message "Update PortMaster before setting up Broforce. Its patcher format has changed."
+            return 1
+        fi
+
+        if grep -Fq 'Cybion' "$staging/main.lua" || ! grep -Fq 'Talkies.say("Ronax"' "$staging/main.lua"; then
+            rm -rf -- "$staging"
+            pm_message "Could not prepare the Broforce patch screen. Please update the port."
+            return 1
+        fi
+
+        printf '%s\n' "$patch_signature" > "$staging/.source-sha256" || {
+            rm -rf -- "$staging"
+            return 1
+        }
+        rm -rf -- "$patched"
+        mv -- "$staging" "$patched" || return 1
+    fi
+
+    source "$controlfolder/runtimes/love_11.5/love.txt" || return 1
+    $GPTOKEYB "$LOVE_GPTK" 9>&- &
+    $LOVE_RUN "$patched" -f "$PATCHER_FILE" -g "$PATCHER_GAME" \
+        -t "$PATCHER_TIME" -q "$PATCHER_QUESTIONS"
+    status=$?
+    pm_gptokeyb_finish
+    return "$status"
+}

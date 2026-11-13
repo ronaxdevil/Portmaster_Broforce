@@ -13,7 +13,7 @@
     ],
     "desc": "A pixel-art run-and-gun platformer with destructible stages and action-movie heroes to rescue.",
     "desc_md": null,
-    "inst": "Requires the Steam Linux edition of Broforce. Run download_depot 274190 274193 in the Steam console and copy depot_274193 to ports/broforce/gamedata. Launch Broforce to build the game on the handheld. Leave at least 3 GiB free for first-time setup.",
+    "inst": "Requires the Steam Linux edition of Broforce. Run download_depot 274190 274193 in the Steam console and copy depot_274193 to ports/broforce/gamedata. First-time setup needs 4.5 GiB free. The port targets 64-bit ARM firmware and includes an ARM32 Unity runtime for lower-memory devices with armhf userland; it uses the ARM64 runtime when armhf glibc 2.35 is unavailable.",
     "inst_md": null,
     "genres": [
       "action",

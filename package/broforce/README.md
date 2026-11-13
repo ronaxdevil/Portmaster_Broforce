@@ -2,17 +2,28 @@
 
 Thanks to [Free Lives](https://freelives.net/) for Broforce, and to wild1walker for the Unity porting tools.
 
-Requires **Broforce for Linux from Steam**. Open Steam's console with `steam://open/console` and enter
-`download_depot 274190 274193`. Copy the downloaded `depot_274193` folder into
-`ports/broforce/gamedata/`. You can also copy the Linux `Broforce_Data` folder directly into
-`gamedata/`. The port verifies the files before setup.
+## Get Steam data
 
-Install the port with PortMaster and start **Broforce** from Ports. The first launch builds the game
-on the handheld and needs at least **4.5 GB** free on the card. The first setup can take 20 minutes
-or longer. It works offline. Keep a separate backup of your game files: after setup succeeds, the
-verified input files in `gamedata/` are removed. Other files are retained. If setup is interrupted,
-launch Broforce again to resume. See `ports/broforce/patchlog.txt` for setup details and
-`ports/broforce/log.txt` for launcher and game output.
+Requires **Broforce for Linux from Steam**.
+
+1. Open Steam's console with `steam://open/console` and enter:
+
+   ```text
+   download_depot 274190 274193
+   ```
+
+2. Copy the downloaded `depot_274193` folder into `ports/broforce/gamedata/`.
+   Alternatively, copy its Linux `Broforce_Data` folder directly into `gamedata/`.
+3. The port verifies the game files before setup.
+
+## Setup
+
+Install the port with PortMaster and start **Broforce** from Ports. First launch builds the game
+on the handheld and needs at least **4.5 GB** free on the card. Setup can take 20 minutes or longer.
+It works offline. Keep a separate backup of your game files: after setup succeeds, verified input
+files in `gamedata/` are removed; other files are retained. If setup is interrupted, launch Broforce
+again to resume. See `ports/broforce/patchlog.txt` for setup details and `ports/broforce/log.txt`
+for launcher and game output.
 
 Setup asks about ASTC texture compression quality, picture shape, render resolution, and face-button
 labels in the Controls menu. **75%** render resolution is the default. **50%** reduces the work for
@@ -47,3 +58,68 @@ folder before reinstalling or removing the port.
 | Select + Start | Quit |
 
 On the Xbox layout, A and B are reversed, as are X and Y.
+
+The port targets 64-bit ARM firmware. Its optional 32-bit ARMv7 Unity Mono route is included for
+lower memory use and better overall performance on low-memory RG-XX devices.
+It runs on AArch64 firmware that provides armhf userland. The launcher uses the AArch64 Unity
+runtime when armhf userland is absent or its glibc is older than 2.35. Both routes use the same
+Steam Linux game files; the ARM32 route does not support 32-bit-only handhelds.
+
+## Compile
+
+### 1. Install build tools
+
+Build on x86-64 Linux, or on Windows through Ubuntu in WSL2. Install Git, curl, tar, xz, dpkg-deb,
+Python 3.11 or newer, GCC, G++, Make,
+ARM cross-binutils, and Docker. On Ubuntu or Debian Linux:
+
+```bash
+sudo apt update
+sudo apt install git curl tar xz-utils dpkg-dev python3 build-essential \
+  binutils-arm-linux-gnueabihf binutils-aarch64-linux-gnu
+```
+
+On Windows, install Ubuntu with WSL2 and Docker Desktop, then enable Docker Desktop's WSL
+integration for Ubuntu. Start Docker before building.
+
+### 2. Clone the source
+
+```bash
+git clone https://github.com/ronaxdevil/Portmaster_Broforce.git
+cd Portmaster_Broforce
+```
+
+The individual stage commands below assume the pinned dependencies have been fetched and the build
+environment is configured as in the source repository's `README.md`. Run these commands from the
+cloned repository root. For a fresh checkout, `bash tools/build.sh` performs setup and runs
+every stage in order.
+
+### 3. Build the Mono runtime
+
+```bash
+bash tools/build-mono.sh
+```
+
+This builds the ARM64 Mono bridge, runtime, and class libraries from the pinned source revisions.
+
+### 4. Build the Unity host runtimes
+
+```bash
+bash tools/build-hosts.sh
+```
+
+This builds both `ua_host` (ARM32/armhf) and `ua_host64` (AArch64).
+
+### 5. Package the port
+
+```bash
+python3 tools/build.py
+```
+
+The packager strips unneeded symbols, adds the runtime and compatibility tools, and writes
+`output/broforce.zip`. To fetch pinned tools and dependencies, initialize the build environment,
+and run every stage in order with one command instead, use:
+
+```bash
+bash tools/build.sh
+```

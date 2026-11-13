@@ -13,7 +13,8 @@ import tempfile
 import zipfile
 
 
-SOURCE = Path(__file__).resolve().parent
+BUILD_TOOLS = Path(__file__).resolve().parent
+SOURCE = BUILD_TOOLS.parent
 PROJECT = SOURCE.parent
 REFERENCE_HASH = "8b7737101a423ad658c12855a67e4407492a79f3af5fb72b2674fcaa9fa0be4d"
 DONORS = (
@@ -83,17 +84,17 @@ def write_package(destination, entries):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--reference", type=Path, default=SOURCE / "dependencies/cuphead-2026.11.01.2.zip")
-    parser.add_argument("--pmu", type=Path, default=SOURCE / ".build/rust-target/aarch64-unknown-linux-musl/release/pmu")
-    parser.add_argument("--asmpatch", type=Path, default=SOURCE / ".build/asmpatch-arm64/asmpatch")
-    parser.add_argument("--hosts", type=Path, default=SOURCE / ".build/hosts")
+    parser.add_argument("--reference", type=Path, default=BUILD_TOOLS / "dependencies/cuphead-2026.11.01.2.zip")
+    parser.add_argument("--pmu", type=Path, default=BUILD_TOOLS / ".build/rust-target/aarch64-unknown-linux-musl/release/pmu")
+    parser.add_argument("--asmpatch", type=Path, default=BUILD_TOOLS / ".build/asmpatch-arm64/asmpatch")
+    parser.add_argument("--hosts", type=Path, default=BUILD_TOOLS / ".build/hosts")
     parser.add_argument("--strip-armhf", default="arm-linux-gnueabihf-strip")
     parser.add_argument("--strip-arm64", default="aarch64-linux-gnu-strip")
-    parser.add_argument("--notices", type=Path, default=SOURCE / ".build/notices")
-    parser.add_argument("--mono", type=Path, default=SOURCE / "dependencies/mono64/out/unity-2017.4-mbe")
-    parser.add_argument("--mono-bridge", type=Path, default=SOURCE / "dependencies/portmaster-unity/runtime/mono64/out/arm64/libil2cpp_mono.so")
+    parser.add_argument("--notices", type=Path, default=BUILD_TOOLS / ".build/notices")
+    parser.add_argument("--mono", type=Path, default=BUILD_TOOLS / "dependencies/mono64/out/unity-2017.4-mbe")
+    parser.add_argument("--mono-bridge", type=Path, default=BUILD_TOOLS / "dependencies/portmaster-unity/runtime/mono64/out/arm64/libil2cpp_mono.so")
     parser.add_argument("--output", type=Path, default=PROJECT / "output/broforce.zip")
-    parser.add_argument("--submission", type=Path, default=SOURCE / ".build/submission")
+    parser.add_argument("--submission", type=Path, default=BUILD_TOOLS / ".build/submission")
     args = parser.parse_args()
 
     with args.reference.open("rb") as reference:
@@ -118,7 +119,7 @@ def main():
     entries["broforce/setup/asmpatch"] = (asmpatch, True)
     entries["broforce/licenses/LICENSE.broforce-port.txt"] = ((SOURCE / "LICENSE").read_bytes(), False)
     entries["broforce/licenses/LICENSE.portmaster-unity.txt"] = (
-        (SOURCE / "dependencies/portmaster-unity/LICENSE").read_bytes(), False
+        (BUILD_TOOLS / "dependencies/portmaster-unity/LICENSE").read_bytes(), False
     )
     for host, arch, machine in (("ua_host", "armhf", 40), ("ua_host64", "arm64", 183)):
         source_binary = args.hosts / arch / host
@@ -128,10 +129,10 @@ def main():
         strip_tool = args.strip_armhf if arch == "armhf" else args.strip_arm64
         if shutil.which(strip_tool) is None:
             parser.error(f"missing cross-binutils strip tool: {strip_tool}")
-        with tempfile.TemporaryDirectory(prefix="broforce-strip-", dir=SOURCE / ".build") as temp_dir:
+        with tempfile.TemporaryDirectory(prefix="broforce-strip-", dir=BUILD_TOOLS / ".build") as temp_dir:
             stripped_binary = Path(temp_dir) / host
             stripped_binary.write_bytes(binary)
-            subprocess.run([strip_tool, "--strip-debug", str(stripped_binary)], check=True)
+            subprocess.run([strip_tool, "--strip-all", str(stripped_binary)], check=True)
             binary = stripped_binary.read_bytes()
         if len(binary) >= source_binary.stat().st_size:
             parser.error(f"debug stripping did not reduce {host}")

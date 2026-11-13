@@ -29,7 +29,7 @@ export NUGET_PACKAGES="$build_dir/nuget"
 mkdir -p "$build_dir/patcher-source"
 git -C "$upstream" archive "$revision" tools/asmpatch | tar -x -C "$build_dir/patcher-source"
 patcher="$build_dir/patcher-source/tools/asmpatch"
-cp "$source_dir"/Broforce{Compatibility,Prompts}.cs "$patcher/src/Patches/"
+cp "$source_dir"/../Broforce{Compatibility,Prompts}.cs "$patcher/src/Patches/"
 sed -i '/new RewiredAndroid(),/a\        new BroforceCompatibility(),\n        new BroforcePrompts(),' "$patcher/src/Patch.cs"
 dotnet publish "$patcher/asmpatch.csproj" -c Release -r linux-arm64 --self-contained \
     -p:PublishSingleFile=true -p:PublishTrimmed=true -p:InvariantGlobalization=true \

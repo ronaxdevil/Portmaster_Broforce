@@ -33,10 +33,24 @@ else
     route=64
 fi
 
-if [ "$route" = 32 ] && [ ! -e /lib/ld-linux-armhf.so.3 ]; then
-    pm_show_error "The 32-bit ARM loader is missing. Restart the handheld or select the 64-bit route." --title "Broforce"
-    pm_finish
-    exit 1
+if [ "$route" = 32 ]; then
+    armhf_version=$(/lib/ld-linux-armhf.so.3 --version 2>/dev/null | sed -n '1s/.*version \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p')
+    armhf_major=${armhf_version%% *}
+    armhf_minor=${armhf_version#* }
+    case "$armhf_major:$armhf_minor" in
+        *[!0-9:]*|:*) armhf_supported=0 ;;
+        *)
+            if [ "$armhf_major" -gt 2 ] || { [ "$armhf_major" -eq 2 ] && [ "$armhf_minor" -ge 35 ]; }; then
+                armhf_supported=1
+            else
+                armhf_supported=0
+            fi
+            ;;
+    esac
+    if [ "$armhf_supported" -ne 1 ]; then
+        pm_message "The 32-bit ARM runtime needs glibc 2.35 or newer. Using the 64-bit runtime instead."
+        route=64
+    fi
 fi
 
 host="$GAMEDIR/ua_host64"
@@ -62,7 +76,11 @@ if [ ! -s "$root/.ready" ]; then
     export PATCHER_GAME=Broforce PATCHER_TIME="Several minutes or longer"
     export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
     if [ -f "$controlfolder/utils/patcher.txt" ] && [ -f "$controlfolder/runtimes/love_11.5/love.txt" ]; then
-        ( source "$controlfolder/utils/patcher.txt" )
+        source "$GAMEDIR/setup/patcher-ronax"
+        if ! run_ronax_patcher; then
+            pm_finish
+            exit 1
+        fi
     else
         "$PATCHER_FILE"
     fi
@@ -107,7 +125,7 @@ case "$aspect" in
     *) unset UA_ASPECT ;;
 esac
 
-$GPTOKEYB2 "$(basename "$host")" -c "$GAMEDIR/broforce.ini" 9>&- &
+$GPTOKEYB2 "$(basename "$host")" 9>&- &
 pm_platform_helper "$host"
 if [ "$route" = 32 ]; then
     export LD_LIBRARY_PATH="/lib32:/usr/lib32:${LD_LIBRARY_PATH:-}"

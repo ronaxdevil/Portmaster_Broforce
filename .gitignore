@@ -1,5 +1,4 @@
-/.build/
-/dependencies/
-/portmaster-unity/
+/tools/.build/
+/tools/dependencies/
 __pycache__/
 *.py[cod]
