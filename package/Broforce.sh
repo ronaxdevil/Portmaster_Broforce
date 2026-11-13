@@ -111,7 +111,7 @@ if [ "$resolution" != device ]; then
 else
     unset UA_RENDER_SCALE
 fi
-export UA_RENDER_SCALER="gpu"
+export UA_RENDER_SCALER="display"
 aspect=$(cat "$GAMEDIR/aspect.txt" 2>/dev/null)
 case "$aspect" in
     16:9|4:3|1:1) export UA_ASPECT="$aspect" ;;

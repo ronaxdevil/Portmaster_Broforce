@@ -2,7 +2,7 @@
 
 Build the BYO-data Broforce port on x86-64 Linux or Windows with WSL. The build produces `../output/broforce.zip` and an unpacked PortMaster submission staging folder. It does not require a copy of Broforce: the player supplies the supported Steam Linux game files when installing the port.
 
-The current package version is **0.2.3**.
+The current package version is **0.2.4**.
 
 ## Build
 
