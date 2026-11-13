@@ -26,7 +26,10 @@ again to resume. See `ports/broforce/patchlog.txt` for setup details and `ports/
 for launcher and game output.
 
 Setup asks about ASTC texture compression quality, picture shape, render resolution, and face-button
-labels in the Controls menu. **75%** render resolution is the default. **50%** reduces the work for
+labels in the Controls menu. General artwork uses ASTC 6×6; texture atlases named `Font Texture`
+use ASTC 4×4 to preserve glyph edges. The current Linux game data contains only empty 0×0
+`Font Texture` placeholders, so the converter skips them; pre-rendered text artwork stays on the
+general 6×6 setting. **75%** render resolution is the default. **50%** reduces the work for
 the GPU further. The picture fills the screen by default, with fixed aspect ratios available if
 you prefer black bars. Physical controls work by position in either button-label mode.
 

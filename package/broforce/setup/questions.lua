@@ -4,7 +4,7 @@
 local questions = {
     {
         id = "TEXTURE_QUALITY",
-        question = "Texture compression quality? Both options use ASTC to save memory. Sharper takes longer to set up.",
+        question = "Texture compression quality? Artwork uses ASTC 6x6; Font Texture glyph atlases use 4x4. Sharper takes longer to set up.",
         options = {
             { "fastest", "Fast (recommended)" },
             { "medium", "Sharper" },

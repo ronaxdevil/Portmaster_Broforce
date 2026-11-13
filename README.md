@@ -2,7 +2,7 @@
 
 Build the BYO-data Broforce port on x86-64 Linux or Windows with WSL. The build produces `../output/broforce.zip` and an unpacked PortMaster submission staging folder. It does not require a copy of Broforce: the player supplies the supported Steam Linux game files when installing the port.
 
-The current package version is **0.2.2**.
+The current package version is **0.2.3**.
 
 ## Build
 
@@ -62,8 +62,11 @@ older than 2.35, the launcher uses the AArch64 Unity runtime. Both routes use th
 game files. This ARM32 process route does not support 32-bit-only handhelds.
 
 The setup questions select ASTC texture compression quality, picture shape, render resolution, and
-the button labels shown in the Controls menu. Render resolution defaults to **75%**; **50%** reduces
-GPU work further. The picture fills the screen by default, with fixed aspect ratios available.
+the button labels shown in the Controls menu. General artwork uses ASTC 6×6; texture atlases named
+`Font Texture` use ASTC 4×4 to preserve glyph edges. The supplied Linux game data has only empty
+0×0 `Font Texture` placeholders, which the converter skips; pre-rendered text artwork uses the
+general 6×6 setting. Render resolution defaults to **75%**; **50%** reduces GPU work further. The
+picture fills the screen by default, with fixed aspect ratios available.
 
 | Setting file | Values |
 | --- | --- |

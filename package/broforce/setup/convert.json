@@ -2,5 +2,11 @@
   "steps": ["shaders", "settings", "audio", "textures"],
   "shaders": {"from": ["glcore"]},
   "settings": {"graphics_apis": [11]},
-  "textures": {"quality": "fastest", "threads": 2, "block": [4, 4]}
+  "textures": {
+    "quality": "fastest",
+    "threads": 2,
+    "block": [6, 6],
+    "sharp_names": "^Font Texture$",
+    "sharp_block": [4, 4]
+  }
 }
