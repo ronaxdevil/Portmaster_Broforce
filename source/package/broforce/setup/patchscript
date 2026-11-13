@@ -34,7 +34,7 @@ if [ ! -f "$W/copied" ]; then
         fail "Copy Steam's Linux depot_274193 folder to broforce/gamedata."
     step "Checking the supplied Linux game files"
     ( cd "$I" && sha256sum -c "$S/linux.sha256" ) ||
-        fail "Unsupported, modified, or incomplete data. Use Steam's Linux depot 274193 listed in broforce.md."
+        fail "Unsupported, modified, or incomplete data. See README.md for the supported Steam Linux depot."
     free_kb=$(df -Pk "$GAMEDIR" | awk 'NR == 2 {print $4}')
     [[ "$free_kb" =~ ^[0-9]+$ ]] && [ "$free_kb" -ge 3145728 ] ||
         fail "Free at least 3 GiB on the card before first-time setup."

@@ -23,25 +23,15 @@ export GAMEDIR="/$directory/ports/broforce"
 cd "$GAMEDIR"
 > "$GAMEDIR/log.txt" && exec > >(tee "$GAMEDIR/log.txt") 2>&1
 
-case "${BROFORCE_ROUTE:-auto}" in
-    auto)
-        if [ -s "$GAMEDIR/game-32/.ready" ] || [ -d "$GAMEDIR/.setup-32" ]; then
-            route=32
-        elif [ -d "$GAMEDIR/game-64" ] || [ -d "$GAMEDIR/.setup-64" ]; then
-            route=64
-        elif [ -e /lib/ld-linux-armhf.so.3 ]; then
-            route=32
-        else
-            route=64
-        fi
-        ;;
-    32|64) route=$BROFORCE_ROUTE ;;
-    *)
-        pm_show_error "Set BROFORCE_ROUTE to auto, 32, or 64." --title "Broforce"
-        pm_finish
-        exit 1
-        ;;
-esac
+if [ -s "$GAMEDIR/game-32/.ready" ] || [ -d "$GAMEDIR/.setup-32" ]; then
+    route=32
+elif [ -d "$GAMEDIR/game-64" ] || [ -d "$GAMEDIR/.setup-64" ]; then
+    route=64
+elif [ -e /lib/ld-linux-armhf.so.3 ]; then
+    route=32
+else
+    route=64
+fi
 
 if [ "$route" = 32 ] && [ ! -e /lib/ld-linux-armhf.so.3 ]; then
     pm_show_error "The 32-bit ARM loader is missing. Restart the handheld or select the 64-bit route." --title "Broforce"
@@ -81,17 +71,18 @@ fi
 if [ ! -s "$root/.ready" ] || [ ! -s "$root/Broforce.apk" ] ||
    [ ! -s "$root/android_package.json" ] || [ ! -s "$root/lib/libunity.so" ] ||
    { [ "$route" = 32 ] && [ ! -s "$root/main.1.org.portmaster.broforce.obb" ]; }; then
-    echo "Broforce setup is incomplete. See broforce/patchlog.txt and launch again to retry."
-    sleep 5
+    if [ -s "$root/.ready" ]; then
+        pm_show_error "The installed Broforce runtime is incomplete. Back up game-$route and rename it before retrying." --title "Broforce"
+    fi
     pm_finish
     exit 1
 fi
 
 sh "$GAMEDIR/setup/cleanup-input" "$GAMEDIR" "$route" || echo "Input cleanup did not complete; see patchlog.txt."
 
-export UA_PAD_NAME="${UA_PAD_NAME:-Xbox Wireless Controller}"
-export UA_DPAD_STICK="${UA_DPAD_STICK:-auto}"
-export UA_FPS="${UA_FPS:-10}"
+export UA_PAD_NAME="Xbox Wireless Controller"
+export UA_DPAD_STICK="auto"
+export UA_FPS="10"
 buttons=$(cat "$GAMEDIR/buttons.txt" 2>/dev/null)
 case "$buttons" in xbox|nintendo) ;; *) buttons=nintendo ;; esac
 export BROFORCE_PROMPTS="$buttons"
@@ -103,12 +94,18 @@ fi
 
 resolution=$(cat "$GAMEDIR/resolution.txt" 2>/dev/null)
 case "$resolution" in device|0.833|0.75|0.5) ;; *) resolution=0.75 ;; esac
-if [ -z "${UA_RENDER_SIZE:-}" ] && [ -z "${UA_RENDER_SCALE:-}" ] && [ "$resolution" != device ]; then
+unset UA_RENDER_SIZE
+if [ "$resolution" != device ]; then
     export UA_RENDER_SCALE="$resolution"
+else
+    unset UA_RENDER_SCALE
 fi
-export UA_RENDER_SCALER="${UA_RENDER_SCALER:-gpu}"
+export UA_RENDER_SCALER="gpu"
 aspect=$(cat "$GAMEDIR/aspect.txt" 2>/dev/null)
-case "$aspect" in 16:9|4:3|1:1) export UA_ASPECT="${UA_ASPECT:-$aspect}" ;; esac
+case "$aspect" in
+    16:9|4:3|1:1) export UA_ASPECT="$aspect" ;;
+    *) unset UA_ASPECT ;;
+esac
 
 $GPTOKEYB2 "$(basename "$host")" -c "$GAMEDIR/broforce.ini" 9>&- &
 pm_platform_helper "$host"

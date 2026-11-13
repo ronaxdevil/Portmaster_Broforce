@@ -1,4 +1,4 @@
 In Steam's console, run: download_depot 274190 274193
 Copy the downloaded depot_274193 folder here, or copy its Broforce_Data folder here directly.
-See ../broforce.md for installation and settings.
+See ../README.md for installation and settings.
 Keep your original game installation and PC saves in their original locations.

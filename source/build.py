@@ -6,7 +6,9 @@
 import argparse
 import hashlib
 from pathlib import Path
+import shutil
 import stat
+import subprocess
 import tempfile
 import zipfile
 
@@ -85,6 +87,8 @@ def main():
     parser.add_argument("--pmu", type=Path, default=SOURCE / ".build/rust-target/aarch64-unknown-linux-musl/release/pmu")
     parser.add_argument("--asmpatch", type=Path, default=SOURCE / ".build/asmpatch-arm64/asmpatch")
     parser.add_argument("--hosts", type=Path, default=SOURCE / ".build/hosts")
+    parser.add_argument("--strip-armhf", default="arm-linux-gnueabihf-strip")
+    parser.add_argument("--strip-arm64", default="aarch64-linux-gnu-strip")
     parser.add_argument("--notices", type=Path, default=SOURCE / ".build/notices")
     parser.add_argument("--mono", type=Path, default=SOURCE / "dependencies/mono64/out/unity-2017.4-mbe")
     parser.add_argument("--mono-bridge", type=Path, default=SOURCE / "dependencies/portmaster-unity/runtime/mono64/out/arm64/libil2cpp_mono.so")
@@ -117,9 +121,20 @@ def main():
         (SOURCE / "dependencies/portmaster-unity/LICENSE").read_bytes(), False
     )
     for host, arch, machine in (("ua_host", "armhf", 40), ("ua_host64", "arm64", 183)):
-        binary = (args.hosts / arch / host).read_bytes()
+        source_binary = args.hosts / arch / host
+        binary = source_binary.read_bytes()
         if not arm_elf(binary, machine) or b"UA_ASPECT\0" not in binary:
             parser.error(f"invalid host or missing picture-shape support: {host}")
+        strip_tool = args.strip_armhf if arch == "armhf" else args.strip_arm64
+        if shutil.which(strip_tool) is None:
+            parser.error(f"missing cross-binutils strip tool: {strip_tool}")
+        with tempfile.TemporaryDirectory(prefix="broforce-strip-", dir=SOURCE / ".build") as temp_dir:
+            stripped_binary = Path(temp_dir) / host
+            stripped_binary.write_bytes(binary)
+            subprocess.run([strip_tool, "--strip-debug", str(stripped_binary)], check=True)
+            binary = stripped_binary.read_bytes()
+        if len(binary) >= source_binary.stat().st_size:
+            parser.error(f"debug stripping did not reduce {host}")
         entries[f"broforce/{host}"] = (binary, True)
     with zipfile.ZipFile(args.reference) as ref:
         for name in DONORS:

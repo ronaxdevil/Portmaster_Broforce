@@ -1,18 +1,6 @@
 -- SPDX-License-Identifier: MIT
 -- SPDX-FileCopyrightText: 2026 Ronax
 
--- PortMaster loads this file before opening the setup dialogue.
-local ok, talkies = pcall(require, "talkies")
-if ok and type(talkies.say) == "function" then
-    local say = talkies.say
-    function talkies.say(title, messages, config)
-        if title == "Cybion" then
-            title = "Ronax"
-        end
-        return say(title, messages, config)
-    end
-end
-
 local questions = {
     {
         id = "TEXTURE_QUALITY",

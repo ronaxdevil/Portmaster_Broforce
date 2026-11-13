@@ -5,7 +5,7 @@ source_dir=$(cd -- "$(dirname -- "$0")" && pwd -P)
 deps="$source_dir/dependencies"
 build="$source_dir/.build"
 
-for command in git curl tar xz dpkg-deb python3 gcc g++ make docker; do
+for command in git curl tar xz dpkg-deb python3 gcc g++ make arm-linux-gnueabihf-strip aarch64-linux-gnu-strip docker; do
     command -v "$command" >/dev/null || { echo "Missing prerequisite: $command" >&2; exit 1; }
 done
 docker info >/dev/null 2>&1 || { echo "Start Docker before building." >&2; exit 1; }

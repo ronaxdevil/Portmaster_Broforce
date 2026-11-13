@@ -4,10 +4,10 @@ Build the BYO-data Broforce port on x86-64 Linux or Windows with WSL. The build 
 
 ## Build
 
-Install Git, curl, tar, xz, dpkg-deb, Python 3.11 or newer, GCC, G++, Make, and Docker with ARM64 container support. Start Docker before building. On Debian or Ubuntu, the non-Docker tools can be installed with:
+Install Git, curl, tar, xz, dpkg-deb, Python 3.11 or newer, GCC, G++, Make, ARM cross-binutils, and Docker with ARM64 container support. Start Docker before building. On Debian or Ubuntu, the non-Docker tools can be installed with:
 
 ```bash
-sudo apt install git curl tar xz-utils dpkg-dev python3 build-essential
+sudo apt install git curl tar xz-utils dpkg-dev python3 build-essential binutils-arm-linux-gnueabihf binutils-aarch64-linux-gnu
 ```
 
 From this directory, run:
