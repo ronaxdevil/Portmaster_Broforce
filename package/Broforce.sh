@@ -96,7 +96,11 @@ if [ ! -s "$root/.ready" ] || [ ! -s "$root/Broforce.apk" ] ||
     exit 1
 fi
 
-sh "$GAMEDIR/setup/cleanup-input" "$GAMEDIR" "$route" || echo "Input cleanup did not complete; see patchlog.txt."
+if ! sh "$GAMEDIR/setup/cleanup-input" "$GAMEDIR" "$route"; then
+    pm_show_error "Could not remove the supplied files from broforce/gamedata. See patchlog.txt." --title "Broforce"
+    pm_finish
+    exit 1
+fi
 
 export UA_PAD_NAME="Xbox Wireless Controller"
 export UA_DPAD_STICK="auto"

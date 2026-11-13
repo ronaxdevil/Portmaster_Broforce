@@ -144,6 +144,7 @@ if [ -s "$W/input-source" ]; then cp -- "$W/input-source" "$Z/.input-cleanup"; f
 sync
 mv -T -- "$Z" "$R"
 sync
-sh "$S/cleanup-input" "$GAMEDIR" "$route" || true
+sh "$S/cleanup-input" "$GAMEDIR" "$route" ||
+    fail "Setup finished, but the supplied files could not be removed from gamedata. See patchlog.txt."
 rm -rf -- "$W"
 step "Setup complete"

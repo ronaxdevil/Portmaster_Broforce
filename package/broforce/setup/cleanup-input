@@ -1,33 +1,43 @@
 #!/bin/sh
-# Remove only unchanged, verified setup inputs after the runtime is installed.
+# Remove all supplied files and folders after the runtime is installed.
 set -eu
 game=$(cd -- "$1" && pwd -P)
 route=$2
 case "$route" in 32|64) ;; *) exit 1 ;; esac
+case "$game" in */broforce) ;; *) exit 1 ;; esac
 runtime="$game/game-$route"
 marker="$runtime/.input-cleanup"
-[ -f "$marker" ] && [ ! -L "$marker" ] || exit 0
+[ ! -L "$runtime" ] || exit 1
 [ -s "$runtime/.ready" ] && [ -s "$runtime/Broforce.apk" ] &&
     [ -s "$runtime/android_package.json" ] && [ -s "$runtime/lib/libunity.so" ] || exit 1
 if [ "$route" = 32 ]; then [ -s "$runtime/main.1.org.portmaster.broforce.obb" ] || exit 1; fi
-case "$(cat "$marker")" in
-    direct) input="$game/gamedata/Broforce_Data" ;;
-    depot) input="$game/gamedata/depot_274193/Broforce_Data" ;;
-    *) exit 1 ;;
-esac
-[ ! -L "$game/gamedata" ] && [ ! -L "$input" ] || exit 1
-[ "$(readlink -f "$input")" = "$(readlink -f "$game/gamedata")/${input#"$game/gamedata/"}" ] || exit 1
-while IFS= read -r entry; do
-    hash=${entry%% *}
-    file=${entry#*  }
-    case "$file" in /*|../*|*/../*|*/..) exit 1 ;; esac
-    path="$input/$file"
-    [ -f "$path" ] || continue
-    [ ! -L "$path" ] || continue
-    [ "$(readlink -f "$path")" = "$input/$file" ] || continue
-    actual=$(sha256sum "$path")
-    [ "${actual%% *}" = "$hash" ] || continue
-    rm -f -- "$path"
-done < "$game/setup/linux.sha256"
-rm -f -- "$marker"
-printf '%s\n' 'Removed unchanged supplied game files after setup; other files were retained.' >> "$game/patchlog.txt"
+if [ -e "$marker" ] || [ -L "$marker" ]; then
+    [ -f "$marker" ] && [ ! -L "$marker" ] || exit 1
+    case "$(cat "$marker")" in direct|depot) ;; *) exit 1 ;; esac
+fi
+data="$game/gamedata"
+[ ! -L "$data" ] || exit 1
+has_entries() {
+    for entry in "$data"/* "$data"/.[!.]* "$data"/..?*; do
+        if [ -e "$entry" ] || [ -L "$entry" ]; then return 0; fi
+    done
+    return 1
+}
+cleaned=0
+if [ -d "$data" ]; then
+    [ "$(readlink -f "$data")" = "$data" ] || exit 1
+    if has_entries; then
+        for entry in "$data"/* "$data"/.[!.]* "$data"/..?*; do
+            [ -e "$entry" ] || [ -L "$entry" ] || continue
+            rm -rf -- "$entry"
+        done
+        if has_entries; then exit 1; fi
+        cleaned=1
+    fi
+elif [ -e "$data" ]; then
+    exit 1
+fi
+if [ -e "$marker" ] || [ -L "$marker" ]; then rm -f -- "$marker"; fi
+if [ "$cleaned" -eq 1 ]; then
+    printf '%s\n' 'Removed all files and folders inside gamedata after successful setup.' >> "$game/patchlog.txt"
+fi

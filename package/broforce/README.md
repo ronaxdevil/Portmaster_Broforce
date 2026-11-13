@@ -20,10 +20,11 @@ Requires **Broforce for Linux from Steam**.
 
 Install the port with PortMaster and start **Broforce** from Ports. First launch builds the game
 on the handheld and needs at least **4.5 GB** free on the card. Setup can take 20 minutes or longer.
-It works offline. Keep a separate backup of your game files: after setup succeeds, verified input
-files in `gamedata/` are removed; other files are retained. If setup is interrupted, launch Broforce
-again to resume. See `ports/broforce/patchlog.txt` for setup details and `ports/broforce/log.txt`
-for launcher and game output.
+It works offline. Keep a separate backup of your game files: after setup succeeds, all files and
+subfolders inside `gamedata/` are removed, and that folder is left empty. If setup is interrupted,
+the supplied files remain in place; launch Broforce again to resume. See
+`ports/broforce/patchlog.txt` for setup details and `ports/broforce/log.txt` for launcher and game
+output.
 
 Setup asks about ASTC texture compression quality, picture shape, render resolution, and face-button
 labels in the Controls menu. General artwork uses ASTC 6×6; texture atlases named `Font Texture`
