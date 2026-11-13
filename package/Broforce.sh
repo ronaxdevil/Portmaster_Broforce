@@ -34,20 +34,9 @@ else
 fi
 
 if [ "$route" = 32 ]; then
-    armhf_version=$(/lib/ld-linux-armhf.so.3 --version 2>/dev/null | sed -n '1s/.*version \([0-9][0-9]*\)\.\([0-9][0-9]*\).*/\1 \2/p')
-    armhf_major=${armhf_version%% *}
-    armhf_minor=${armhf_version#* }
-    case "$armhf_major:$armhf_minor" in
-        *[!0-9:]*|:*) armhf_supported=0 ;;
-        *)
-            if [ "$armhf_major" -gt 2 ] || { [ "$armhf_major" -eq 2 ] && [ "$armhf_minor" -ge 35 ]; }; then
-                armhf_supported=1
-            else
-                armhf_supported=0
-            fi
-            ;;
-    esac
-    if [ "$armhf_supported" -ne 1 ]; then
+    armhf_glibc=${CFW_GLIBC:-0}
+    case "$armhf_glibc" in ''|*[!0-9]*) armhf_glibc=0 ;; esac
+    if [ "$armhf_glibc" -lt 235 ]; then
         pm_message "The 32-bit ARM runtime needs glibc 2.35 or newer. Using the 64-bit runtime instead."
         route=64
     fi
