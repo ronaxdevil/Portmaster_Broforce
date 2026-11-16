@@ -14,7 +14,7 @@ if [ "$(git -C "$checkout" rev-parse HEAD)" != "$PORTMASTER_UNITY_REVISION" ]; t
     exit 1
 fi
 for patch in "$source_dir/../$PORTMASTER_UNITY_PATCH" "$source_dir/../$PORTMASTER_UNITY_MONO_PATCH" \
-    "$source_dir/../$PORTMASTER_UNITY_MONO_CLASSLIB_PATCH"; do
+    "$source_dir/../$PORTMASTER_UNITY_MONO_CLASSLIB_PATCH" "$source_dir/../$PORTMASTER_UNITY_ROTATION_PATCH"; do
     if git -C "$checkout" apply --reverse --check "$patch" 2>/dev/null; then
         echo "$(basename "$patch") is already applied."
     elif git -C "$checkout" apply --check "$patch"; then

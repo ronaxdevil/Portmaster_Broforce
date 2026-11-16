@@ -1,0 +1,893 @@
+# Backport of wild1walker/portmaster-unity 2384493 and b9034c9 for rotated fbdev panels.
+# Includes the glpresent single-context prerequisite; pinned runtime remains ed3d8cc.
+diff --git a/runtime/android/egl_glue.c b/runtime/android/egl_glue.c
+index 840df76..8406a5b 100644
+--- a/runtime/android/egl_glue.c
++++ b/runtime/android/egl_glue.c
+@@ -10,6 +10,8 @@
+ //   eglCreateContext        retried with only EGL_CONTEXT_CLIENT_VERSION on EGL_BAD_ATTRIBUTE
+ //   eglSwapBuffers          optional host hooks before and after each swap (input pumping, pacing,
+ //                           stats)
++//   eglMakeCurrent          an optional host hook after it: which context is current with the
++//                           window on this thread (glpresent.c's framebuffer 0 for a turned panel)
+ //   UA_EGL_PBUFFER=1        tests without a display (Mesa's surfaceless platform): the window surface
+ //                           is a pbuffer of the window's size, configs are chosen for pbuffers
+ //   eglGetProcAddress       returns the wrappers for the wrapped names, else the real function
+@@ -226,6 +228,18 @@ static EGLBoolean shim_eglQuerySurface(EGLDisplay d, EGLSurface s, EGLint attr,
+     return real.QuerySurface(d, s, attr, value);
+ }
+ 
++static void (*g_current_hook)(void *ctx, int window);
++void egl_glue_set_current_hook(void (*hook)(void *ctx, int window)) { g_current_hook = hook; }
++
++static EGLBoolean shim_eglMakeCurrent(EGLDisplay d, EGLSurface draw, EGLSurface read, EGLContext ctx)
++{
++    if (!ensure() || !real.MakeCurrent) return EGL_FALSE;
++    EGLBoolean r = real.MakeCurrent(d, draw, read, ctx);
++    void (*hook)(void *, int) = g_current_hook;
++    if (r && hook) hook(ctx, draw && draw == g_window_surface);
++    return r;
++}
++
+ // egl_glue_set_single_sample_window (egl_glue.h): off unless the host turns it on
+ static int g_single_sample;
+ void egl_glue_set_single_sample_window(int on) { g_single_sample = on; }
+@@ -365,6 +379,7 @@ so_shim egl_shims[] = {
+     { "eglGetConfigAttrib", (void *)shim_eglGetConfigAttrib },
+     { "eglCreateContext", (void *)shim_eglCreateContext },
+     { "eglSwapBuffers", (void *)shim_eglSwapBuffers },
++    { "eglMakeCurrent", (void *)shim_eglMakeCurrent },
+     { "eglGetProcAddress", (void *)shim_eglGetProcAddress },
+     { "eglPresentationTimeANDROID", (void *)shim_eglPresentationTimeANDROID },
+     { NULL, NULL },
+diff --git a/runtime/android/egl_glue.h b/runtime/android/egl_glue.h
+index 5a52633..5a35b63 100644
+--- a/runtime/android/egl_glue.h
++++ b/runtime/android/egl_glue.h
+@@ -28,6 +28,10 @@ void egl_glue_set_swap_offload(int (*offload)(egl_glue_swap_fn swap, void *dpy,
+ // Called on Unity's render thread right after each real eglSwapBuffers returned, with its result
+ // (NULL to remove).
+ void egl_glue_set_swap_done_hook(void (*hook)(void *ctx, int ok), void *ctx);
++// Called on the calling thread after each eglMakeCurrent that succeeded (not with a host display):
++// the context made current (NULL: released) and whether it draws into Unity's window surface (NULL
++// to remove).
++void egl_glue_set_current_hook(void (*hook)(void *ctx, int window));
+ // Called right before the driver creates a window surface for Unity's window (not with a host
+ // display, nor for UA_EGL_PBUFFER's pbuffer; NULL to remove).
+ void egl_glue_set_window_hook(void (*hook)(void));
+diff --git a/runtime/host/display.c b/runtime/host/display.c
+index 36063c9..5368382 100644
+--- a/runtime/host/display.c
++++ b/runtime/host/display.c
+@@ -123,9 +123,11 @@ static int scale_setup(void)
+     return ok;
+ }
+ 
++static int g_srot;                              // degrees the panel is turned (display_gpu_rotate)
++
+ void display_frame_rect(int *x, int *y, int *w, int *h)
+ {
+-    if (g_sbars && g_sstate > 0) { *x = g_sx; *y = g_sy; *w = g_sfw; *h = g_sfh; }
++    if (g_sbars && g_sstate > 0 && !g_srot) { *x = g_sx; *y = g_sy; *w = g_sfw; *h = g_sfh; }
+ }
+ 
+ // The surface's lines above Unity's frame, black: the bar above the picture. In the frame's own
+@@ -157,7 +159,8 @@ void display_gpu_spanned(void) { g_spanned = 1; g_sbars = 0; }
+ 
+ void display_present_scaled(void)
+ {
+-    if (!g_srw || g_sstate < 0 || glpresent_active()) return;   // (UA_PRESENT_THREAD: the present thread scales)
++    if (!g_srw || g_sstate < 0 || g_srot || glpresent_active()) return;   // (UA_PRESENT_THREAD: the present thread scales;
++                                                                          // a turned panel: display_present_rotated)
+     if (g_spanned) {
+         if (!g_sstate) {
+             g_sstate = gl_load() ? 1 : -1;
+@@ -207,6 +210,178 @@ void display_present_scaled(void)
+     if (rd) G.Enable(GL_RASTERIZER_DISCARD);
+ }
+ 
++// ---- a panel turned a quarter (fbdev.c's UA_ROTATE; render thread, Unity's context, at the swap) ---
++// Unity's frame is glpresent.c's framebuffer 0 (a texture of the host's); one quad draws it turned
++// over the window, after the host's own drawing into the frame (the on-screen keyboard, the cursor,
++// screenshots). Positions and texture coordinates come from gl_VertexID: no buffer or vertex state
++// of Unity's is used. Put back after it: the program, vertex array, active unit and its 2D texture
++// and sampler, viewport, draw framebuffer, colour mask and clear colour, and the scissor, blend,
++// depth, stencil, cull, rasterizer-discard, polygon-offset and coverage switches. GLES 3.
++#define GL_VERTEX_SHADER 0x8B31
++#define GL_FRAGMENT_SHADER 0x8B30
++#define GL_COMPILE_STATUS 0x8B81
++#define GL_LINK_STATUS 0x8B82
++#define GL_CURRENT_PROGRAM 0x8B8D
++#define GL_VERTEX_ARRAY_BINDING 0x85B5
++#define GL_ACTIVE_TEXTURE 0x84E0
++#define GL_TEXTURE0 0x84C0
++#define GL_SAMPLER_BINDING 0x8919
++#define GL_VIEWPORT 0x0BA2
++#define GL_BLEND 0x0BE2
++#define GL_DEPTH_TEST 0x0B71
++#define GL_STENCIL_TEST 0x0B90
++#define GL_CULL_FACE 0x0B44
++#define GL_POLYGON_OFFSET_FILL 0x8037
++#define GL_SAMPLE_ALPHA_TO_COVERAGE 0x809E
++#define GL_SAMPLE_COVERAGE 0x80A0
++#define GL_TRIANGLE_STRIP 0x0005
++#define GL_COLOR 0x1800
++static struct {
++    unsigned (*CreateShader)(unsigned);
++    void (*ShaderSource)(unsigned, int, const char *const *, const int *);
++    void (*CompileShader)(unsigned), (*DeleteShader)(unsigned);
++    void (*GetShaderiv)(unsigned, unsigned, int *), (*GetProgramiv)(unsigned, unsigned, int *);
++    unsigned (*CreateProgram)(void);
++    void (*AttachShader)(unsigned, unsigned), (*LinkProgram)(unsigned), (*UseProgram)(unsigned);
++    int (*GetUniformLocation)(unsigned, const char *);
++    void (*Uniform1i)(int, int);
++    void (*GenVertexArrays)(int, unsigned *), (*BindVertexArray)(unsigned);
++    void (*ActiveTexture)(unsigned), (*BindSampler)(unsigned, unsigned);
++    void (*Viewport)(int, int, int, int), (*DrawArrays)(unsigned, int, int);
++} R;
++static int g_rx, g_ry, g_rfw, g_rfh, g_rbars;   // the frame's place on the window; black around it
++static unsigned g_rprog, g_rvao;
++static int g_rstate;                            // 0 not set up, 1 on, -1 failed (frames not shown)
++
++void display_gpu_rotate(int deg)
++{
++    if (!g_srw || glpresent_start_sync(g_srw, g_srh) != 0) {
++        fprintf(stderr, "[display] UA_ROTATE=%d: no frame of the host's (GL wrappers missing): the picture is not turned\n", deg);
++        return;
++    }
++    int q = deg == 90 || deg == 270;
++    int lw = q ? g_sdh : g_sdw, lh = q ? g_sdw : g_sdh;          // the window as the handheld is held
++    int fw = lw, fh = (int)((double)lw * g_srh / g_srw + 0.5);   // the frame at its own aspect
++    if (fh > lh) { fh = lh; fw = (int)((double)lh * g_srw / g_srh + 0.5); }
++    if (fw >= lw - 1 && fh >= lh - 1) { fw = lw; fh = lh; }
++    int fx = (lw - fw) / 2, fy = (lh - fh) / 2;
++    g_rbars = fw < lw || fh < lh;
++    if (deg == 270) { g_rx = g_sdw - (fy + fh); g_ry = fx; g_rfw = fh; g_rfh = fw; }
++    else if (deg == 90) { g_rx = fy; g_ry = g_sdh - (fx + fw); g_rfw = fh; g_rfh = fw; }
++    else { g_rx = g_sdw - (fx + fw); g_ry = g_sdh - (fy + fh); g_rfw = fw; g_rfh = fh; }
++    g_srot = deg;
++}
++
++static unsigned rotate_shader(unsigned type, const char *src)
++{
++    unsigned sh = R.CreateShader(type);
++    int ok = 0;
++    R.ShaderSource(sh, 1, &src, NULL);
++    R.CompileShader(sh);
++    R.GetShaderiv(sh, GL_COMPILE_STATUS, &ok);
++    if (!ok) { R.DeleteShader(sh); return 0; }
++    return sh;
++}
++
++static int rotate_setup(void)
++{
++    if (!gl_load()) return 0;
++    void *h = dlopen("libGLESv2.so.2", RTLD_NOW | RTLD_GLOBAL);
++    if (!h) h = dlopen("libGLESv2.so", RTLD_NOW | RTLD_GLOBAL);
++    void *(*gpa)(const char *) = (void *(*)(const char *))egl_glue_real("eglGetProcAddress");
++#define L(f) do { *(void **)&R.f = h ? dlsym(h, "gl" #f) : NULL; if (!R.f && gpa) *(void **)&R.f = gpa("gl" #f); } while (0)
++    L(CreateShader); L(ShaderSource); L(CompileShader); L(DeleteShader); L(GetShaderiv); L(GetProgramiv); L(CreateProgram);
++    L(AttachShader); L(LinkProgram); L(UseProgram); L(GetUniformLocation); L(Uniform1i); L(GenVertexArrays);
++    L(BindVertexArray); L(ActiveTexture); L(BindSampler); L(Viewport); L(DrawArrays);
++#undef L
++    void **f = (void **)&R;
++    for (unsigned i = 0; i < sizeof R / sizeof *f; i++) if (!f[i]) return 0;
++    // p: the corner of the window's quad (0..1 over the frame's place); uv: where it is in the frame
++    char vs[512];
++    snprintf(vs, sizeof vs, "#version 300 es\nout highp vec2 uv;\nvoid main() {\n"
++             "    highp vec2 p = vec2(float(gl_VertexID & 1), float(gl_VertexID >> 1));\n"
++             "    gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);\n    uv = %s;\n}\n",
++             g_srot == 270 ? "vec2(p.y, 1.0 - p.x)" : g_srot == 90 ? "vec2(1.0 - p.y, p.x)" : "vec2(1.0 - p.x, 1.0 - p.y)");
++    static const char fs[] = "#version 300 es\nprecision highp float;\nuniform sampler2D t;\nin highp vec2 uv;\n"
++                             "out vec4 c;\nvoid main() { c = texture(t, uv); }\n";
++    unsigned v = rotate_shader(GL_VERTEX_SHADER, vs), fr = v ? rotate_shader(GL_FRAGMENT_SHADER, fs) : 0;
++    if (!fr) { if (v) R.DeleteShader(v); return 0; }
++    int ok = 0, prog0 = 0;
++    g_rprog = R.CreateProgram();
++    R.AttachShader(g_rprog, v);
++    R.AttachShader(g_rprog, fr);
++    R.LinkProgram(g_rprog);
++    R.DeleteShader(v);
++    R.DeleteShader(fr);
++    R.GetProgramiv(g_rprog, GL_LINK_STATUS, &ok);
++    if (!ok) return 0;
++    G.GetIntegerv(GL_CURRENT_PROGRAM, &prog0);
++    R.UseProgram(g_rprog);
++    R.Uniform1i(R.GetUniformLocation(g_rprog, "t"), 0);
++    R.UseProgram((unsigned)prog0);
++    R.GenVertexArrays(1, &g_rvao);
++    return 1;
++}
++
++void display_present_rotated(void)
++{
++    if (!g_srot || g_rstate < 0) return;
++    unsigned tex = glpresent_fb0_texture();
++    if (!tex) return;                           // (not the window's context)
++    if (!g_rstate) {
++        g_rstate = rotate_setup() ? 1 : -1;
++        fprintf(stderr, g_rstate > 0 ? "[display] UA_ROTATE=%d: Unity's %dx%d frame turned onto %dx%d of the %dx%d window by the GPU\n"
++                                     : "[display] UA_ROTATE=%d: no GLES 3 program for the turn: frames of %dx%d are not shown (%dx%d of %dx%d)\n",
++                g_srot, g_srw, g_srh, g_rfw, g_rfh, g_sdw, g_sdh);
++        if (g_rstate < 0) return;
++    }
++    static const unsigned sw[] = { GL_SCISSOR_TEST, GL_BLEND, GL_DEPTH_TEST, GL_STENCIL_TEST, GL_CULL_FACE, GL_RASTERIZER_DISCARD,
++                                   GL_POLYGON_OFFSET_FILL, GL_SAMPLE_ALPHA_TO_COVERAGE, GL_SAMPLE_COVERAGE };
++    unsigned char on[sizeof sw / sizeof *sw], mask[4];
++    int prog = 0, vao = 0, unit = 0, tex0 = 0, smp = 0, dfb = 0, vp[4];
++    float c[4];
++    for (unsigned i = 0; i < sizeof sw / sizeof *sw; i++) if ((on[i] = G.IsEnabled(sw[i]))) G.Disable(sw[i]);
++    G.GetIntegerv(GL_CURRENT_PROGRAM, &prog);
++    G.GetIntegerv(GL_VERTEX_ARRAY_BINDING, &vao);
++    G.GetIntegerv(GL_ACTIVE_TEXTURE, &unit);
++    if (unit != GL_TEXTURE0) R.ActiveTexture(GL_TEXTURE0);
++    G.GetIntegerv(GL_TEXTURE_BINDING_2D, &tex0);
++    G.GetIntegerv(GL_SAMPLER_BINDING, &smp);
++    G.GetIntegerv(GL_VIEWPORT, vp);
++    G.GetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &dfb);
++    G.GetBooleanv(GL_COLOR_WRITEMASK, mask);
++    G.GetFloatv(GL_COLOR_CLEAR_VALUE, c);
++    G.BindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);  // (the driver's: the window itself)
++    G.ColorMask(1, 1, 1, 1);
++    if (g_rbars) {                              // a new pass of the window: nothing of it loaded, bars black
++        static const unsigned ds[2] = { GL_DEPTH, GL_STENCIL };
++        G.InvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 2, ds);
++        G.ClearColor(0, 0, 0, 1);
++        G.Clear(GL_COLOR_BUFFER_BIT);
++    } else {
++        static const unsigned all[3] = { GL_COLOR, GL_DEPTH, GL_STENCIL };
++        G.InvalidateFramebuffer(GL_DRAW_FRAMEBUFFER, 3, all);
++    }
++    R.Viewport(g_rx, g_ry, g_rfw, g_rfh);
++    R.UseProgram(g_rprog);
++    R.BindVertexArray(g_rvao);
++    G.BindTexture(GL_TEXTURE_2D, tex);
++    if (smp) R.BindSampler(0, 0);
++    R.DrawArrays(GL_TRIANGLE_STRIP, 0, 4);
++    if (smp) R.BindSampler(0, (unsigned)smp);
++    G.BindTexture(GL_TEXTURE_2D, (unsigned)tex0);
++    if (unit != GL_TEXTURE0) R.ActiveTexture((unsigned)unit);
++    R.BindVertexArray((unsigned)vao);
++    R.UseProgram((unsigned)prog);
++    R.Viewport(vp[0], vp[1], vp[2], vp[3]);
++    G.BindFramebuffer(GL_DRAW_FRAMEBUFFER, (unsigned)dfb);
++    G.ClearColor(c[0], c[1], c[2], c[3]);
++    G.ColorMask(mask[0], mask[1], mask[2], mask[3]);
++    for (unsigned i = 0; i < sizeof sw / sizeof *sw; i++) if (on[i]) G.Enable(sw[i]);
++}
++
++static void on_current(void *ctx, int window) { glpresent_made_current(window ? ctx : NULL); }
++
+ static const char *g_backend = "fbdev";
+ static egl_host_display g_hd;
+ static int g_refresh;
+@@ -288,7 +463,10 @@ static int use_fbdev(void)
+         android_window_set_native(&panel);
+         egl_glue_set_report_size(w, h);
+         display_gpu_scale(w, h, pw, ph);
+-        if (fbdev_bars_height()) display_gpu_spanned();
++        if (fbdev_rotation()) {
++            display_gpu_rotate(fbdev_rotation());
++            egl_glue_set_current_hook(on_current);
++        } else if (fbdev_bars_height()) display_gpu_spanned();
+     }
+     ANativeWindow *win = android_window_get();
+     android_window_set_max_size(ANativeWindow_getWidth(win), ANativeWindow_getHeight(win));
+diff --git a/runtime/host/display.h b/runtime/host/display.h
+index 213f9ce..719235d 100644
+--- a/runtime/host/display.h
++++ b/runtime/host/display.h
+@@ -39,3 +39,8 @@ void display_frame_rect(int *x, int *y, int *w, int *h);
+ // After display_gpu_scale: UA_ASPECT is placed by the surface itself (fbdev_bars_height): no copy, only the bar cleared.
+ void display_gpu_spanned(void);
+ void display_present_scaled(void);
++// After display_gpu_scale: the panel is turned deg degrees (fbdev.c's UA_ROTATE): Unity draws into a
++// frame of the host's (glpresent_start_sync) that display_present_rotated (render thread, at the
++// swap, after the host's own drawing into the frame) draws turned over the window.
++void display_gpu_rotate(int deg);
++void display_present_rotated(void);
+diff --git a/runtime/host/fbdev.c b/runtime/host/fbdev.c
+index cb393f5..56c2a7b 100644
+--- a/runtime/host/fbdev.c
++++ b/runtime/host/fbdev.c
+@@ -68,6 +68,21 @@
+ //   UA_RENDER_PIXELS=<n>  at most about n pixels, on every device (also where UA_RENDER_RAM leaves
+ //                     the panel's size): a port's default for big screens, e.g. 560000 (a
+ //                     1920x1152 panel: 960x576; 720x480: the panel's size)
++//
++// A panel mounted a quarter turn in the handheld (Anbernic's RG28XX: a 480x640 framebuffer in a
++// 640x480 handheld). The framebuffer holds the picture turned, and nothing between the GPU and the
++// panel turns it back for us: Unity is told the handheld's landscape size, draws into a frame of
++// the host's (glpresent.c's framebuffer 0, one frame) and display.c draws that frame turned over
++// the whole surface (the GPU scaler's place; no display-engine crop).
++//   UA_ROTATE=0|90|180|270|auto  how far the panel is turned, clockwise, as PortMaster's
++//                     DISPLAY_ORIENTATION says it: 270 for a framebuffer that holds the picture
++//                     turned a quarter anticlockwise (its image turned 90 degrees clockwise is
++//                     upright; muOS's RG28XX). A number is used as it is, on any framebuffer.
++//                     auto (default): a framebuffer taller than wide is turned a quarter, any
++//                     other is not (an HDMI screen on the same handheld; 180 only by number);
++//                     which way: DISPLAY_ORIENTATION when it says 90 or 270, else the kernel's
++//                     fbcon=rotate:1 or 3, else 270 (as PortMaster's device_info.txt; muOS's
++//                     RG28XX gave DISPLAY_ORIENTATION=0).
+ #define _GNU_SOURCE
+ #include "fbdev.h"
+ 
+@@ -108,6 +123,7 @@ static int g_gw, g_gh;                      // the render size for the GPU scale
+ static int g_vh;                            // UA_ASPECT without a copy: the screen's height the driver is told (fbdev_bars_height)
+ static volatile int g_cw, g_ch;
+ static volatile int g_crop;
++static int g_rot;                           // UA_ROTATE: degrees the panel is turned (fbdev_rotation)
+ 
+ #ifdef FBDEV_TEST
+ static long (*g_test_fb)(int, unsigned long, void *);
+@@ -285,6 +301,40 @@ int fbdev_pick_render_size(int pw, int ph, const char *size, const char *scale,
+ 
+ int fbdev_bars_height(void) { return g_vh; }
+ 
++int fbdev_pick_rotation(const char *rotate, const char *orientation, const char *cmdline, int fw, int fh)
++{
++    if (rotate && *rotate && strcmp(rotate, "auto")) {
++        if (!strcmp(rotate, "0") || !strcmp(rotate, "90") || !strcmp(rotate, "180") || !strcmp(rotate, "270")) return atoi(rotate);
++        fprintf(stderr, "[fbdev] UA_ROTATE=%s: 0, 90, 180, 270 or auto; auto\n", rotate);
++    }
++    if (fh <= fw) return 0;                     // (a quarter turn only for a framebuffer taller than wide)
++    // a framebuffer taller than wide in a handheld is mounted a quarter turned whatever else is said:
++    // which way from DISPLAY_ORIENTATION or fbcon=rotate when they say a quarter, else 270 (muOS's
++    // RG28XX: PortMaster's DISPLAY_ORIENTATION was 0 there)
++    if (orientation && (!strcmp(orientation, "90") || !strcmp(orientation, "270"))) return atoi(orientation);
++    const char *p = cmdline ? strstr(cmdline, "fbcon=rotate:") : NULL;
++    if (p && (p == cmdline || p[-1] == ' ') && (p[13] == '1' || p[13] == '3')) return p[13] == '1' ? 90 : 270;
++    return 270;
++}
++
++int fbdev_rotation(void) { return g_rot; }
++
++// UA_ROTATE's choice for the framebuffer (ANDROID_FBDEV, else /dev/fb0) as it is now; 0 without one
++int fbdev_rotation_wanted(void)
++{
++    const char *dev = getenv("ANDROID_FBDEV");
++    int fd = open(dev && *dev ? dev : "/dev/fb0", O_RDONLY | O_CLOEXEC);
++    struct fb_var_screeninfo v;
++    if (fd < 0) return 0;
++    int ok = fb_ioctl(fd, FBIOGET_VSCREENINFO, &v) == 0 && v.xres && v.yres;
++    close(fd);
++    if (!ok) return 0;
++    char cmd[2048] = "";
++    int cfd = open("/proc/cmdline", O_RDONLY | O_CLOEXEC);
++    if (cfd >= 0) { ssize_t n = read(cfd, cmd, sizeof cmd - 1); cmd[n > 0 ? n : 0] = 0; close(cfd); }
++    return fbdev_pick_rotation(getenv("UA_ROTATE"), getenv("DISPLAY_ORIENTATION"), cmd, (int)v.xres, (int)v.yres);
++}
++
+ int fbdev_gpu_render_size(int *w, int *h, int *pw, int *ph)
+ {
+     if (!g_gw) return 0;
+@@ -345,18 +395,37 @@ void fbdev_setup(void)
+     int fit = screens_in_memory(&v, &f);
+     g_fb_w = v.xres;
+     g_fb_h = v.yres;
++    // UA_ROTATE: the sizes below are the handheld's (the panel's turned a quarter); the GPU draws
++    // every frame turned, so there is always a GPU render size
++    g_rot = fbdev_rotation_wanted();
++    int quarter = g_rot == 90 || g_rot == 270;
++    int pw = quarter ? (int)v.yres : (int)v.xres, ph = quarter ? (int)v.xres : (int)v.yres;
++    if (g_rot) fprintf(stderr, "[fbdev] UA_ROTATE: the panel is turned %d degrees: Unity draws %dx%d, the GPU turns it onto %ux%u\n",
++                       g_rot, pw, ph, v.xres, v.yres);
+     // UA_ASPECT: the picture keeps that aspect, with black bars; the GPU places it (the display
+     // engine's layer always fills the panel: sunxi's pans put its window back)
+-    int lw, lh, letterbox = fbdev_fit_aspect(v.xres, v.yres, getenv("UA_ASPECT"), &lw, &lh);
++    int lw, lh, letterbox = fbdev_fit_aspect(pw, ph, getenv("UA_ASPECT"), &lw, &lh);
+     int picked = fbdev_pick_render_size(lw, lh, getenv("UA_RENDER_SIZE"), getenv("UA_RENDER_SCALE"), getenv("UA_RENDER_RAM"),
+                                         getenv("UA_RENDER_PIXELS"), mem_total_kb(), &g_rw, &g_rh);
+-    if (!picked && letterbox) { g_rw = lw; g_rh = lh; picked = 1; }
++    if (!picked && (letterbox || g_rot)) { g_rw = lw; g_rh = lh; picked = 1; }
++    // UA_RENDER_SIZE_VAR (as in display_sdl.c): the game draws its world at the render size by itself
++    // and reads the size from that variable; Unity keeps the panel's size (UA_ASPECT's), no scaler
++    const char *var = getenv("UA_RENDER_SIZE_VAR");
++    if (picked && var && *var && (g_rw < lw || g_rh < lh)) {
++        char size[32];
++        snprintf(size, sizeof size, "%dx%d", g_rw, g_rh);
++        setenv(var, size, 1);
++        fprintf(stderr, "[fbdev] render size %dx%d (%.0f %% of %ux%u's pixels): the game's own, told in %s; Unity keeps %dx%d\n",
++                g_rw, g_rh, 100.0 * g_rw * g_rh / ((double)v.xres * v.yres), v.xres, v.yres, var, lw, lh);
++        if (letterbox || g_rot) { g_rw = lw; g_rh = lh; }
++        else { g_rw = g_rh = 0; picked = 0; }
++    }
+     if (picked) {
+         // the display engine's scaler: Allwinner's (sunxi disp, /sys/class/disp) shows a cropped
+         // framebuffer over the whole panel; other drivers (Rockchip's) would show it smaller or
+         // shifted, so there the GPU scales (UA_RENDER_SCALER=display|gpu chooses)
+         const char *sc = getenv("UA_RENDER_SCALER");
+-        int de = letterbox ? 0 : sc && !strcmp(sc, "display") ? 1 : sc && !strcmp(sc, "gpu") ? 0 : access("/sys/class/disp", F_OK) == 0;
++        int de = letterbox || g_rot ? 0 : sc && !strcmp(sc, "display") ? 1 : sc && !strcmp(sc, "gpu") ? 0 : access("/sys/class/disp", F_OK) == 0;
+         if (de) {
+             g_cw = g_rw;
+             g_ch = g_rh;
+@@ -369,7 +438,7 @@ void fbdev_setup(void)
+             g_rw = g_rh = 0;
+             fprintf(stderr, "[fbdev] render size %dx%d (%.0f %% of %ux%u's pixels): the GPU scales the window to the panel "
+                     "(%s)\n", g_gw, g_gh, 100.0 * g_gw * g_gh / ((double)v.xres * v.yres), v.xres, v.yres,
+-                    letterbox ? "UA_ASPECT: black bars" : "no Allwinner display engine");
++                    g_rot ? "UA_ROTATE: turned" : letterbox ? "UA_ASPECT: black bars" : "no Allwinner display engine");
+         }
+     }
+     // the refresh period from the mode's timings, when the driver gives them (else 60 Hz until the
+@@ -385,7 +454,7 @@ void fbdev_setup(void)
+     // buffers lie that far apart, the next buffer's bar is the bar below, the real pans still show a
+     // whole panel, and more buffers fit in the memory than whole screens (720x720: 4 instead of 3).
+     int bar_below = 0;
+-    if (letterbox && g_gw == (int)v.xres && g_gh < (int)v.yres && !(getenv("UA_ASPECT_COPY") && *getenv("UA_ASPECT_COPY"))) {
++    if (letterbox && !g_rot && g_gw == (int)v.xres && g_gh < (int)v.yres && !(getenv("UA_ASPECT_COPY") && *getenv("UA_ASPECT_COPY"))) {
+         int h = g_gh + ((int)v.yres - g_gh) / 2;
+         bar_below = (int)v.yres - h;
+         int lines = f.line_length ? (int)(f.smem_len / f.line_length) : 0;
+@@ -888,6 +957,6 @@ void fbdev_test_bars(int vh, int ph, unsigned vy)
+ void fbdev_test_fb(long (*fb)(int, unsigned long, void *))
+ {
+     g_test_fb = fb;
+-    g_rw = g_rh = g_gw = g_gh = g_vh = g_cw = g_ch = g_crop = g_changed = g_var_ok = 0;
++    g_rw = g_rh = g_gw = g_gh = g_vh = g_cw = g_ch = g_crop = g_changed = g_var_ok = g_rot = 0;
+ }
+ #endif
+diff --git a/runtime/host/fbdev.h b/runtime/host/fbdev.h
+index e5b9fbd..5360c03 100644
+--- a/runtime/host/fbdev.h
++++ b/runtime/host/fbdev.h
+@@ -18,6 +18,14 @@ int fbdev_render_size(int *w, int *h);
+ // UA_RENDER_SIZE / UA_RENDER_SCALE without Allwinner's display engine: 1, the render size and the
+ // panel's (display.c's GPU scaler draws the frame over the panel), else 0
+ int fbdev_gpu_render_size(int *w, int *h, int *pw, int *ph);
++// UA_ROTATE (fbdev.c): degrees the panel is turned clockwise, after fbdev_setup (0: none). With a
++// turn, fbdev_gpu_render_size gives Unity's size (the handheld's) and the framebuffer's.
++int fbdev_rotation(void);
++// UA_ROTATE's choice for the framebuffer now (before fbdev_setup: whether the host's GL wrappers for
++// it are needed), and the choice itself from the variables' values, /proc/cmdline and the
++// framebuffer's size (tests)
++int fbdev_rotation_wanted(void);
++int fbdev_pick_rotation(const char *rotate, const char *orientation, const char *cmdline, int fw, int fh);
+ // UA_ASPECT without a copy: the height of the surface (bar above + picture; the GPU only clears the bar), else 0.
+ int fbdev_bars_height(void);
+ // The EGL driver draws and presents the whole screen itself (PowerVR's native window 0): the
+diff --git a/runtime/host/frames.c b/runtime/host/frames.c
+index 93f571a..cdeaad2 100644
+--- a/runtime/host/frames.c
++++ b/runtime/host/frames.c
+@@ -177,6 +177,7 @@ static void on_swap(void *ctx)
+     if (shot) screenshot();
+     if (!osk_first) osk_draw();
+     if (cursor && !cursor_first) pointer_draw();          // UA_POINTER's cursor (nothing when off)
++    display_present_rotated();                  // a turned panel: the frame, all drawn, turned onto the window
+     if (++total == 1) glhooks_first_frame();
+     hitches_frame();
+     prof_swap();
+diff --git a/runtime/host/glpresent.c b/runtime/host/glpresent.c
+index 3502955..eba4f54 100644
+--- a/runtime/host/glpresent.c
++++ b/runtime/host/glpresent.c
+@@ -16,6 +16,10 @@
+ // shares Unity's, waits for the frame's fence on the GPU, scales it over the window in one
+ // glBlitFramebuffer (linear, as display.c's scaler; one pass fewer than its copy and scale) and swaps
+ // (it waits for the GPU there). Unity may run up to two frames ahead of the screen.
++//
++// Without a thread (glpresent_start_sync: fbdev.c's UA_ROTATE, a panel mounted a quarter turn): the
++// same framebuffer 0, one frame of Unity's size, on the window's thread; display.c draws it turned
++// onto the window in Unity's own context right before each swap (glpresent_fb0_texture).
+ #define _GNU_SOURCE
+ #include <dlfcn.h>
+ #include <pthread.h>
+@@ -61,6 +65,8 @@ typedef unsigned char GLboolean; typedef void *GLsync; typedef uint64_t GLuint64
+ 
+ static so_shim g_shims[16];
+ static int g_want;                              // UA_PRESENT_THREAD=1 (the wrappers are in)
++static int g_wrapped;                           // the wrappers are in (UA_PRESENT_THREAD=1 or a turned panel)
++static int g_sync;                              // glpresent_start_sync: no thread, one frame
+ static int g_rw, g_rh, g_dw, g_dh;              // render and window sizes (glpresent_start)
+ static const glpresent_window *g_win;
+ 
+@@ -91,6 +97,7 @@ static char g_shot[512];                        // a screenshot of the window as
+ 
+ // ---- Unity's framebuffer 0: three frames per context of Unity's (framebuffers are not shared)
+ #define SLOTS 3
++static int g_slots = SLOTS;                     // (1 without the thread)
+ typedef struct { void *ctx; GLuint fbo[SLOTS], tex[SLOTS], ds; int cur, ok; } ring;
+ static ring g_rings[4];
+ static int g_nrings;
+@@ -98,7 +105,7 @@ static pthread_mutex_t g_ring_lock = PTHREAD_MUTEX_INITIALIZER;
+ static __thread ring *t_ring;                   // the calling thread's current context's (NULL: off here)
+ static __thread int t_draw0, t_read0;           // Unity has "framebuffer 0" bound to draw / to read
+ 
+-static int is_ours(const ring *r, GLuint fb) { for (int i = 0; i < SLOTS; i++) if (r->fbo[i] == fb) return 1; return 0; }
++static int is_ours(const ring *r, GLuint fb) { for (int i = 0; i < g_slots; i++) if (r->fbo[i] == fb) return 1; return 0; }
+ static int target_is0(GLenum t) { return t == GL_READ_FRAMEBUFFER ? t_read0 : t_draw0; }
+ void glpresent_tstate_take(glpresent_tstate *s) { s->ring = t_ring; s->draw0 = t_draw0; s->read0 = t_read0; }
+ void glpresent_tstate_give(const glpresent_tstate *s) { t_ring = (ring *)s->ring; t_draw0 = s->draw0; t_read0 = s->read0; }
+@@ -167,13 +174,13 @@ static ring *ring_for(void *ctx)
+         GLint tex0 = 0, rb0 = 0;
+         r_GetIntegerv(GL_TEXTURE_BINDING_2D, &tex0);
+         r_GetIntegerv(GL_RENDERBUFFER_BINDING, &rb0);
+-        r_GenTextures(SLOTS, r->tex);
++        r_GenTextures(g_slots, r->tex);
+         r_GenRenderbuffers(1, &r->ds);
+         r_BindRenderbuffer(GL_RENDERBUFFER, r->ds);
+         r_RenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, g_rw, g_rh);
+-        r_GenFramebuffers(SLOTS, r->fbo);
++        r_GenFramebuffers(g_slots, r->fbo);
+         r->ok = 1;
+-        for (int i = 0; i < SLOTS; i++) {
++        for (int i = 0; i < g_slots; i++) {
+             r_BindTexture(GL_TEXTURE_2D, r->tex[i]);
+             r_TexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, g_rw, g_rh);
+             r_TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+@@ -185,7 +192,7 @@ static ring *ring_for(void *ctx)
+         }
+         r_BindTexture(GL_TEXTURE_2D, (GLuint)tex0);
+         r_BindRenderbuffer(GL_RENDERBUFFER, (GLuint)rb0);
+-        fprintf(stderr, "[present] Unity's context %p: framebuffer 0 is %d frames of %dx%d of the host's%s\n", ctx, SLOTS, g_rw, g_rh,
++        fprintf(stderr, "[present] Unity's context %p: framebuffer 0 is %d frames of %dx%d of the host's%s\n", ctx, g_slots, g_rw, g_rh,
+                 r->ok ? "" : " (INCOMPLETE: off)");
+     }
+     pthread_mutex_unlock(&g_ring_lock);
+@@ -284,14 +291,25 @@ int glpresent_wanted(void) { return g_want; }
+ void glpresent_start(int rw, int rh, int dw, int dh, const glpresent_window *w)
+ {
+     g_rw = rw; g_rh = rh; g_dw = dw; g_dh = dh; g_win = w;
+-    fprintf(stderr, "[present] UA_PRESENT_THREAD: Unity's %dx%d frames shown by a present thread, scaled to %dx%d\n", rw, rh, dw, dh);
++    if (rw == dw && rh == dh) fprintf(stderr, "[present] UA_PRESENT_THREAD: Unity's %dx%d frames shown by a present thread\n", rw, rh);
++    else fprintf(stderr, "[present] UA_PRESENT_THREAD: Unity's %dx%d frames shown by a present thread, scaled to %dx%d\n", rw, rh, dw, dh);
+ }
+ 
+ int glpresent_active(void) { return g_win != NULL; }
+ 
++int glpresent_start_sync(int rw, int rh)
++{
++    if (!g_wrapped || g_win) return -1;
++    g_rw = rw; g_rh = rh; g_slots = 1; g_sync = 1;
++    fprintf(stderr, "[present] Unity's framebuffer 0 is a %dx%d frame of the host's, drawn onto the window at each swap\n", rw, rh);
++    return 0;
++}
++
++unsigned glpresent_fb0_texture(void) { ring *r = t_ring; return r ? r->tex[r->cur] : 0; }
++
+ void glpresent_made_current(void *ctx)
+ {
+-    if (!g_win || !ctx) { t_ring = NULL; t_draw0 = t_read0 = 0; return; }
++    if ((!g_win && !g_sync) || !ctx) { t_ring = NULL; t_draw0 = t_read0 = 0; return; }
+     ring *r = ring_for(ctx);
+     t_ring = r;
+     t_draw0 = t_read0 = r != NULL;
+@@ -354,11 +372,12 @@ static void *gl_driver(const char *name)
+     return h ? dlsym(h, name) : NULL;
+ }
+ 
+-const so_shim *glpresent_table(void *(*next)(const char *name))
++const so_shim *glpresent_table(void *(*next)(const char *name), int sync)
+ {
+     memset(g_shims, 0, sizeof g_shims);
+     const char *e = getenv("UA_PRESENT_THREAD");
+-    if (!e || strcmp(e, "1")) return g_shims;
++    int thread = e && !strcmp(e, "1");
++    if (!thread && !sync) return g_shims;
+ #define N(f) do { void *p = next ? next("gl" #f) : NULL; *(void **)&r_##f = p ? p : gl_driver("gl" #f); } while (0)
+     N(BindFramebuffer); N(GetIntegerv); N(GetFramebufferAttachmentParameteriv); N(InvalidateFramebuffer); N(DiscardFramebufferEXT);
+     N(DrawBuffers); N(ReadBuffer); N(GenTextures); N(BindTexture); N(TexStorage2D); N(TexParameteri); N(GenRenderbuffers);
+@@ -375,7 +394,7 @@ const so_shim *glpresent_table(void *(*next)(const char *name))
+         !r_CheckFramebufferStatus || !r_FenceSync || !r_WaitSync || !r_DeleteSync || !r_Flush || !D.BindFramebuffer ||
+         !D.GenFramebuffers || !D.FramebufferTexture2D || !D.BlitFramebuffer || !D.InvalidateFramebuffer || !D.FenceSync || !D.WaitSync ||
+         !D.DeleteSync || !D.Flush) {
+-        fprintf(stderr, "[present] GLES 3 functions missing: UA_PRESENT_THREAD off\n");
++        fprintf(stderr, "[present] GLES 3 functions missing: %s off\n", thread ? "UA_PRESENT_THREAD" : "the turned panel's frame");
+         return g_shims;
+     }
+     int k = 0;
+@@ -386,6 +405,7 @@ const so_shim *glpresent_table(void *(*next)(const char *name))
+     if (r_DiscardFramebufferEXT) g_shims[k++] = (so_shim){ "glDiscardFramebufferEXT", (void *)w_DiscardFramebufferEXT };
+     g_shims[k++] = (so_shim){ "glDrawBuffers", (void *)w_DrawBuffers };
+     g_shims[k++] = (so_shim){ "glReadBuffer", (void *)w_ReadBuffer };
+-    g_want = 1;
++    g_want = thread;
++    g_wrapped = 1;
+     return g_shims;
+ }
+diff --git a/runtime/host/glpresent.h b/runtime/host/glpresent.h
+index 7cbf7c4..7498496 100644
+--- a/runtime/host/glpresent.h
++++ b/runtime/host/glpresent.h
+@@ -2,8 +2,9 @@
+ #ifndef GLPRESENT_H
+ #define GLPRESENT_H
+ #include "../loader/so_loader.h"
+-// The GL wrappers when UA_PRESENT_THREAD=1 (else an empty table); next(name): the next layer's function.
+-const so_shim *glpresent_table(void *(*next)(const char *name));
++// The GL wrappers when UA_PRESENT_THREAD=1 or sync (a turned panel may need glpresent_start_sync),
++// else an empty table; next(name): the next layer's function.
++const so_shim *glpresent_table(void *(*next)(const char *name), int sync);
+ int glpresent_wanted(void);                     // UA_PRESENT_THREAD=1 and the wrappers are in
+ // The window's side, from the display backend (display_sdl.c): a context that shares Unity's, made
+ // current with the window on the present thread, its swap and swap interval there.
+@@ -16,6 +17,11 @@ typedef struct glpresent_window {
+ } glpresent_window;
+ void glpresent_start(int rw, int rh, int dw, int dh, const glpresent_window *w);   // on from here
+ int glpresent_active(void);
++// No thread (fbdev.c's UA_ROTATE): Unity's framebuffer 0 is one rw x rh frame of the host's on the thread
++// whose context is made current with the window (glpresent_made_current); display.c draws it onto the
++// window. 0 when on (the wrappers are in and no present thread runs).
++int glpresent_start_sync(int rw, int rh);
++unsigned glpresent_fb0_texture(void);           // the colour texture of this thread's framebuffer 0 (0: off)
+ void glpresent_made_current(void *ctx);         // Unity's context current (surfaceless) on this thread; NULL: released
+ int glpresent_swap(void);                       // Unity's swap on this thread: 0 handed on
+ void glpresent_swap_interval(int interval);
+diff --git a/runtime/host/test/rotate_test.sh b/runtime/host/test/rotate_test.sh
+new file mode 100644
+index 0000000..d78f5c2
+--- /dev/null
++++ b/runtime/host/test/rotate_test.sh
+@@ -0,0 +1,11 @@
++#!/bin/sh
++# A turned panel's present (test_rotate.c: fbdev.c's UA_ROTATE choice, display.c's turned draw of
++# glpresent.c's frame, read back) on Mesa llvmpipe's surfaceless platform, aarch64 (ua-display-test,
++# made by display_test.sh).
++set -e
++cd "$(dirname "$0")/../.."
++SRC="host/test/test_rotate.c host/display.c host/display_sdl.c host/glpresent.c host/fbdev.c android/egl_glue.c android/native_window.c android/log_shim.c"
++docker run --rm --platform linux/arm64 -v "$PWD":/w:ro -w /w -e SRC="$SRC" ua-display-test sh -c '
++  set -e
++  gcc -O2 -g -std=gnu11 -Wall -Wextra -Wno-unused-parameter -o /tmp/test_rotate $SRC -lSDL2 -ldl -lpthread
++  for k in 0 1 2 3 4 5; do EGL_PLATFORM=surfaceless LIBGL_ALWAYS_SOFTWARE=1 /tmp/test_rotate $k; done'
+diff --git a/runtime/host/test/test_display.c b/runtime/host/test/test_display.c
+index df48e8e..dd1115c 100644
+--- a/runtime/host/test/test_display.c
++++ b/runtime/host/test/test_display.c
+@@ -310,7 +310,7 @@ int main(void)
+     if (fbdev) setenv("ANDROID_FBDEV", fbdev, 1); else unsetenv("ANDROID_FBDEV");
+ 
+     int present = getenv("TEST_PRESENT") != NULL;
+-    if (present) CHECK(glpresent_table(NULL)[0].name != NULL);      // (ua_host's GL chain makes the table at its start)
++    if (present) CHECK(glpresent_table(NULL, 0)[0].name != NULL);      // (ua_host's GL chain makes the table at its start)
+     CHECK(display_init("test_display") == 0);
+     CHECK(glpresent_active() == present);
+     fprintf(stderr, "test: backend %s (expected %s)\n", display_backend(), expect);
+diff --git a/runtime/host/test/test_fbdev.c b/runtime/host/test/test_fbdev.c
+index 0d705de..aa06dc7 100644
+--- a/runtime/host/test/test_fbdev.c
++++ b/runtime/host/test/test_fbdev.c
+@@ -444,6 +444,38 @@ int main(void)
+     setup_fb(720, 720, 8 << 20, 0, "16:9");
+     CHECK(fbdev_bars_height() == 562 && fbdev_buffers() == 3 && fb_var.yres_virtual == 4 * 562 + 158);
+     unsetenv("UA_FB_FLIP");
++    // UA_ROTATE: a 480x640 framebuffer (muOS's RG28XX): Unity draws the handheld's 640x480, the GPU turns it
++    unsetenv("DISPLAY_ORIENTATION");
++    setup_fb(480, 640, 8 << 20, 0, "");
++    CHECK(fbdev_rotation() == 270 && fbdev_bars_height() == 0 && gpu_size_is(640, 480, 480, 640));
++    setenv("UA_RENDER_SIZE", "540x360 480x480", 1);  // (Hollow Knight's)
++    setup_fb(480, 640, 8 << 20, 0, "");
++    CHECK(gpu_size_is(480, 360, 480, 640));
++    setenv("UA_RENDER_SIZE_VAR", "TEST_RENDER_SIZE_VAR", 1);
++    setup_fb(480, 640, 8 << 20, 0, "");
++    CHECK(gpu_size_is(640, 480, 480, 640));
++    CHECK(getenv("TEST_RENDER_SIZE_VAR") && !strcmp(getenv("TEST_RENDER_SIZE_VAR"), "480x360"));
++    unsetenv("UA_RENDER_SIZE_VAR");
++    unsetenv("UA_RENDER_SIZE");
++    setup_fb(480, 640, 8 << 20, 0, "16:9");          // bars: the GPU's, no taller buffers
++    CHECK(fbdev_bars_height() == 0 && gpu_size_is(640, 360, 480, 640));
++    setenv("DISPLAY_ORIENTATION", "90", 1);
++    setup_fb(480, 640, 8 << 20, 0, "");
++    CHECK(fbdev_rotation() == 90 && gpu_size_is(640, 480, 480, 640));
++    setup_fb(640, 480, 8 << 20, 0, "");              // (an HDMI screen on the same handheld)
++    CHECK(fbdev_rotation() == 0 && gpu_size_is(0, 0, 0, 0));
++    unsetenv("DISPLAY_ORIENTATION");
++    setenv("DISPLAY_ORIENTATION", "0", 1);           // (muOS's RG28XX: PortMaster said 0)
++    setup_fb(480, 640, 8 << 20, 0, "");
++    CHECK(fbdev_rotation() == 270 && gpu_size_is(640, 480, 480, 640));
++    unsetenv("DISPLAY_ORIENTATION");
++    setenv("UA_ROTATE", "90", 1);                    // by number: on any framebuffer
++    setup_fb(720, 480, 8 << 20, 0, "");
++    CHECK(fbdev_rotation() == 90 && gpu_size_is(480, 720, 720, 480));
++    setenv("UA_ROTATE", "0", 1);
++    setup_fb(480, 640, 8 << 20, 0, "");
++    CHECK(fbdev_rotation() == 0 && gpu_size_is(0, 0, 0, 0));
++    unsetenv("UA_ROTATE");
+     printf("%d checks, %d failures\n", checks, failures);
+     return failures != 0;
+ }
+diff --git a/runtime/host/test/test_rotate.c b/runtime/host/test/test_rotate.c
+new file mode 100644
+index 0000000..ddd2e14
+--- /dev/null
++++ b/runtime/host/test/test_rotate.c
+@@ -0,0 +1,184 @@
++// Test of a turned panel's present (fbdev.c's UA_ROTATE, display.c's display_present_rotated) without
++// a device: Mesa llvmpipe on its surfaceless platform, a pbuffer as the window. glpresent.c's
++// framebuffer 0 (one frame of the host's, made for the context current with the window) gets four
++// coloured quarters, display_present_rotated draws it onto the window, and the window is read back:
++// each quarter where the turn puts it, the black bars of a frame of another aspect, and Unity's GL
++// state as it was. One case a process (the turn is set up once, as in ua_host): test_rotate <case>, 0
++// the choice of the turn. Built and run by rotate_test.sh (aarch64).
++#define _GNU_SOURCE
++#include "../display.h"
++#include "../fbdev.h"
++#include "../glpresent.h"
++#include "../../android/egl_glue.h"
++
++#include <dlfcn.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++static int failures, checks;
++#define CHECK(c) do { checks++; if (!(c)) { failures++; fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, #c); } } while (0)
++
++typedef void *EGLDisplay, *EGLConfig, *EGLSurface, *EGLContext;
++typedef int32_t EGLint;
++#define EGL_NONE 0x3038
++#define EGL_SURFACE_TYPE 0x3033
++#define EGL_PBUFFER_BIT 0x0001
++#define EGL_RENDERABLE_TYPE 0x3040
++#define EGL_OPENGL_ES3_BIT 0x0040
++#define EGL_RED_SIZE 0x3024
++#define EGL_GREEN_SIZE 0x3023
++#define EGL_BLUE_SIZE 0x3022
++#define EGL_WIDTH 0x3057
++#define EGL_HEIGHT 0x3056
++#define EGL_CONTEXT_CLIENT_VERSION 0x3098
++#define GL_FRAMEBUFFER 0x8D40
++#define GL_DRAW_FRAMEBUFFER 0x8CA9
++#define GL_READ_FRAMEBUFFER 0x8CA8
++#define GL_DRAW_FRAMEBUFFER_BINDING 0x8CA6
++#define GL_SCISSOR_TEST 0x0C11
++#define GL_BLEND 0x0BE2
++#define GL_VIEWPORT 0x0BA2
++#define GL_COLOR_BUFFER_BIT 0x4000
++#define GL_COLOR_CLEAR_VALUE 0x0C22
++#define GL_RGBA 0x1908
++#define GL_UNSIGNED_BYTE 0x1401
++
++static struct {
++    void (*BindFramebuffer)(unsigned, unsigned), (*Enable)(unsigned), (*Disable)(unsigned), (*Scissor)(int, int, int, int);
++    void (*ClearColor)(float, float, float, float), (*Clear)(unsigned), (*Viewport)(int, int, int, int);
++    void (*ReadPixels)(int, int, int, int, unsigned, unsigned, void *), (*GetIntegerv)(unsigned, int *);
++    void (*GetFloatv)(unsigned, float *), (*Finish)(void);
++    unsigned char (*IsEnabled)(unsigned);
++} gl;
++
++enum { RED, GREEN, BLUE, WHITE, BLACK };
++static const unsigned char rgb[5][3] = { { 255, 0, 0 }, { 0, 255, 0 }, { 0, 0, 255 }, { 255, 255, 255 }, { 0, 0, 0 } };
++
++// the frame (rw x rh, GL's rows): bottom left red, bottom right green, top left blue, top right white
++static void draw_frame(int rw, int rh)
++{
++    gl.BindFramebuffer(GL_FRAMEBUFFER, glpresent_fb0());
++    gl.Enable(GL_SCISSOR_TEST);
++    static const int q[4][3] = { { 0, 0, RED }, { 1, 0, GREEN }, { 0, 1, BLUE }, { 1, 1, WHITE } };
++    for (int i = 0; i < 4; i++) {
++        gl.Scissor(q[i][0] * rw / 2, q[i][1] * rh / 2, rw / 2, rh / 2);
++        const unsigned char *c = rgb[q[i][2]];
++        gl.ClearColor(c[0] / 255.f, c[1] / 255.f, c[2] / 255.f, 1);
++        gl.Clear(GL_COLOR_BUFFER_BIT);
++    }
++}
++
++static int pixel_is(int x, int y, int want)
++{
++    unsigned char p[4];
++    gl.BindFramebuffer(GL_READ_FRAMEBUFFER, 0);
++    gl.ReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, p);
++    int ok = p[0] == rgb[want][0] && p[1] == rgb[want][1] && p[2] == rgb[want][2];
++    if (!ok) fprintf(stderr, "  window (%d,%d): %d %d %d, want %d %d %d\n", x, y, p[0], p[1], p[2], rgb[want][0], rgb[want][1], rgb[want][2]);
++    return ok;
++}
++
++// One window: Unity's rw x rh frame on a dw x dh window turned deg; the colours expected at the
++// window's corners (GL's: bottom left, bottom right, top left, top right), inset by 'in' pixels
++// from the frame's place (bars: x0..x1 of the window's columns hold the frame, the rest black)
++static void run(int deg, int rw, int rh, int dw, int dh, const int corner[4], int x0, int x1)
++{
++    fprintf(stderr, "== UA_ROTATE=%d: %dx%d frame on a %dx%d window\n", deg, rw, rh, dw, dh);
++    EGLDisplay (*GetDisplay)(void *) = egl_glue_real("eglGetDisplay");
++    int (*Initialize)(EGLDisplay, EGLint *, EGLint *) = egl_glue_real("eglInitialize");
++    int (*ChooseConfig)(EGLDisplay, const EGLint *, EGLConfig *, EGLint, EGLint *) = egl_glue_real("eglChooseConfig");
++    EGLSurface (*CreatePbuffer)(EGLDisplay, EGLConfig, const EGLint *) = egl_glue_real("eglCreatePbufferSurface");
++    EGLContext (*CreateContext)(EGLDisplay, EGLConfig, EGLContext, const EGLint *) = egl_glue_real("eglCreateContext");
++    int (*MakeCurrent)(EGLDisplay, EGLSurface, EGLSurface, EGLContext) = egl_glue_real("eglMakeCurrent");
++    EGLDisplay d = GetDisplay(NULL);
++    Initialize(d, NULL, NULL);
++    static const EGLint ca[] = { EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
++                                 EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_NONE };
++    EGLConfig cfg;
++    EGLint n = 0;
++    CHECK(ChooseConfig(d, ca, &cfg, 1, &n) && n == 1);
++    EGLint pa[] = { EGL_WIDTH, dw, EGL_HEIGHT, dh, EGL_NONE };
++    static const EGLint xa[] = { EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE };
++    EGLSurface s = CreatePbuffer(d, cfg, pa);
++    EGLContext c = CreateContext(d, cfg, NULL, xa);
++    CHECK(s && c && MakeCurrent(d, s, s, c));
++
++    display_gpu_scale(rw, rh, dw, dh);          // (as use_fbdev: Unity's size, the window's)
++    display_gpu_rotate(deg);
++    glpresent_made_current(c);                  // (egl_glue's eglMakeCurrent hook, the window's context)
++    CHECK(glpresent_fb0() != 0 && glpresent_fb0_texture() != 0);
++    gl.BindFramebuffer(GL_FRAMEBUFFER, 0);      // the window starts grey: the bars must be drawn black
++    gl.Disable(GL_SCISSOR_TEST);
++    gl.ClearColor(0.5f, 0.5f, 0.5f, 1);
++    gl.Clear(GL_COLOR_BUFFER_BIT);
++    draw_frame(rw, rh);
++    // Unity's state at its swap: framebuffer 0 bound, a scissor, blending, its viewport and clear colour
++    gl.BindFramebuffer(GL_FRAMEBUFFER, glpresent_fb0());
++    gl.Scissor(1, 2, 3, 4);
++    gl.Enable(GL_BLEND);
++    gl.Viewport(5, 6, 7, 8);
++    gl.ClearColor(0.25f, 0.5f, 0.75f, 1);
++    display_present_rotated();
++    int fb = -1, vp[4];
++    float cc[4];
++    gl.GetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &fb);
++    gl.GetIntegerv(GL_VIEWPORT, vp);
++    gl.GetFloatv(GL_COLOR_CLEAR_VALUE, cc);
++    CHECK(fb == (int)glpresent_fb0());
++    CHECK(vp[0] == 5 && vp[1] == 6 && vp[2] == 7 && vp[3] == 8);
++    CHECK(cc[0] == 0.25f && cc[1] == 0.5f && cc[2] == 0.75f);
++    CHECK(gl.IsEnabled(GL_SCISSOR_TEST) && gl.IsEnabled(GL_BLEND));
++    gl.Disable(GL_SCISSOR_TEST);
++    gl.Disable(GL_BLEND);
++    gl.Finish();
++    CHECK(pixel_is(x0 + 2, 2, corner[0]));
++    CHECK(pixel_is(x1 - 3, 2, corner[1]));
++    CHECK(pixel_is(x0 + 2, dh - 3, corner[2]));
++    CHECK(pixel_is(x1 - 3, dh - 3, corner[3]));
++    if (x0 > 0) CHECK(pixel_is(x0 / 2, dh / 2, BLACK));
++    if (x1 < dw) CHECK(pixel_is((x1 + dw) / 2, dh / 2, BLACK));
++    glpresent_made_current(NULL);
++    MakeCurrent(d, NULL, NULL, NULL);
++}
++
++int main(int argc, char **argv)
++{
++    int k = argc > 1 ? atoi(argv[1]) : 0;
++    void *h = dlopen("libGLESv2.so.2", RTLD_NOW | RTLD_GLOBAL);
++    if (!h) { fprintf(stderr, "no libGLESv2\n"); return 1; }
++#define L(f) *(void **)&gl.f = dlsym(h, "gl" #f)
++    L(BindFramebuffer); L(Enable); L(Disable); L(Scissor); L(ClearColor); L(Clear); L(Viewport); L(ReadPixels);
++    L(GetIntegerv); L(GetFloatv); L(Finish); L(IsEnabled);
++#undef L
++    if (!k) {                                   // the choice of the turn
++    CHECK(fbdev_pick_rotation(NULL, NULL, "", 480, 640) == 270);          // taller than wide: PortMaster's 270
++    CHECK(fbdev_pick_rotation("auto", NULL, "", 640, 480) == 0);
++    CHECK(fbdev_pick_rotation(NULL, "90", "", 480, 640) == 90);           // DISPLAY_ORIENTATION
++    CHECK(fbdev_pick_rotation(NULL, "0", "", 480, 640) == 270);           // (muOS's RG28XX: PortMaster said 0)
++    CHECK(fbdev_pick_rotation(NULL, "270", "", 640, 480) == 0);           // (an HDMI screen: not turned)
++    CHECK(fbdev_pick_rotation(NULL, "180", "", 480, 640) == 270);         // (180 only by number)
++    CHECK(fbdev_pick_rotation(NULL, "0", "fbcon=rotate:1", 480, 640) == 90);
++    CHECK(fbdev_pick_rotation(NULL, "", "fbcon=rotate:2", 480, 640) == 270);
++    CHECK(fbdev_pick_rotation(NULL, NULL, "root=/dev/mmcblk0p2 fbcon=rotate:1 quiet", 480, 640) == 90);
++    CHECK(fbdev_pick_rotation(NULL, NULL, "fbcon=rotate:3", 480, 640) == 270);
++    CHECK(fbdev_pick_rotation(NULL, NULL, "xfbcon=rotate:1", 480, 640) == 270);
++    CHECK(fbdev_pick_rotation("0", "270", "fbcon=rotate:3", 480, 640) == 0);    // a number is used as it is
++    CHECK(fbdev_pick_rotation("90", NULL, "", 720, 480) == 90);
++    CHECK(fbdev_pick_rotation("180", NULL, "", 720, 480) == 180);
++    CHECK(fbdev_pick_rotation("sideways", NULL, "", 480, 640) == 270);    // (not a turn: auto)
++    }
++
++    CHECK(glpresent_table(NULL, 1)[0].name != NULL);
++    // the picture turned a quarter anticlockwise in the framebuffer (muOS's RG28XX): read upright
++    // when the framebuffer's image is turned 90 degrees clockwise
++    static const int c270[4] = { BLUE, RED, WHITE, GREEN }, c90[4] = { GREEN, WHITE, RED, BLUE }, c180[4] = { WHITE, BLUE, GREEN, RED };
++    if (k == 1) run(270, 64, 48, 48, 64, c270, 0, 48);
++    if (k == 2) run(90, 64, 48, 48, 64, c90, 0, 48);
++    if (k == 3) run(270, 32, 24, 48, 64, c270, 0, 48);     // a render size: scaled up
++    if (k == 4) run(180, 64, 48, 64, 48, c180, 0, 64);
++    if (k == 5) run(270, 64, 36, 48, 64, c270, 6, 42);     // a 16:9 frame on a 4:3 handheld: bars at the panel's sides
++    printf("%d checks, %d failures\n", checks, failures);
++    return failures != 0;
++}
+diff --git a/runtime/host/ua_host.c b/runtime/host/ua_host.c
+index 7502e03..7f094e4 100644
+--- a/runtime/host/ua_host.c
++++ b/runtime/host/ua_host.c
+@@ -587,7 +587,7 @@ int main(int argc, char **argv)
+     g_hook_shims = glhooks_table();            // UA_SHADER_DUMP/OVERRIDE, UA_COMPUTE_GROUP, UA_SWAP_INTERVAL
+     int msaa = msaa_fix();                     // UA_MSAA_FIX: also a single-sampled window
+     g_msaa_shims = msaafix_table(msaa, gltrace_wrapper);
+-    g_present_shims = glpresent_table(below_glpresent);       // UA_PRESENT_THREAD
++    g_present_shims = glpresent_table(below_glpresent, fbdev_rotation_wanted());   // UA_PRESENT_THREAD, UA_ROTATE
+     g_persist_shims = glpersist_table(after_glpersist);       // UA_GL_PERSIST
+     g_arena_shims = glarena_table(after_glarena);             // UA_GL_ARENA
+     g_state_shims = glstate_table(after_glstate);             // UA_GL_STATE
