@@ -8,7 +8,7 @@ namespace AsmPatch;
 sealed class BroforceCompatibility : Patch
 {
     public override string Name => "broforce-compatibility";
-    public override string Summary => "Use offline Steam results, initialize Odin on ARM, and handle missing launch arguments";
+    public override string Summary => "Use offline Steam results, initialize Odin on ARM, handle missing arguments, and invoke instance RPCs";
     public override bool OptIn => true;
 
     public override Result Run(Game game, bool apply)
@@ -60,6 +60,17 @@ sealed class BroforceCompatibility : Patch
             get.DeclaringType.FullName != "System.Environment" || getArgs.Next?.OpCode != OpCodes.Stloc_0)
             return Result.Failed("The intro's command-line argument handling differs from the supported build");
 
+        var execute = main.MainModule.GetType("NonStaticRPCObject")?.Methods.SingleOrDefault(m =>
+            m.Name == "Execute" && m.HasBody && m.Parameters.Count == 0);
+        var flags = execute?.Body.Instructions.SingleOrDefault(i =>
+            i.OpCode == OpCodes.Ldc_I4 && Equals(i.Operand, 368) && i.Next?.OpCode == OpCodes.Stloc_2);
+        if (flags == null || !execute.Body.Instructions.Any(i => i.Operand is MethodReference call &&
+            call.DeclaringType.FullName == "System.Type" && call.Name == "InvokeMember" &&
+            call.Parameters.Count == 5) || !execute.Body.Instructions.Any(i =>
+            i.Operand is MethodReference call && call.DeclaringType.FullName == "Networking.RPCSecurity" &&
+            call.Name == "IsAllowed"))
+            return Result.Failed("The instance RPC reflection call differs from the supported build");
+
         if (apply)
         {
             foreach (var method in methods)
@@ -94,6 +105,10 @@ sealed class BroforceCompatibility : Patch
             argIL.InsertBefore(store, argIL.Create(OpCodes.Pop));
             argIL.InsertBefore(store, argIL.Create(OpCodes.Ldc_I4_0));
             argIL.InsertBefore(store, argIL.Create(OpCodes.Newarr, main.MainModule.TypeSystem.String));
+
+            // The ARM64 Mono runtime requires Instance explicitly when resolving instance RPCs.
+            // Preserve the security gate and all other flags: 368 | BindingFlags.Instance (4).
+            flags.Operand = 372;
             game.MarkChanged(main);
         }
 
@@ -101,6 +116,7 @@ sealed class BroforceCompatibility : Patch
         result.Details.Add("Assembly-CSharp-firstpass.dll: Steam unavailable and initialization returns false");
         result.Details.Add("Sisus.OdinSerializer.dll: ARM alignment initialized without Java reflection");
         result.Details.Add("Assembly-CSharp.dll: intro treats null command-line arguments as an empty array");
+        result.Details.Add("Assembly-CSharp.dll: NonStaticRPCObject.Execute includes BindingFlags.Instance (368 -> 372)");
         return result;
     }
 }
