@@ -59,10 +59,21 @@ if [ ! -f "$W/copied" ]; then
     touch "$W/copied"
 fi
 
+if [ -s "$W/texture_block" ]; then
+    texture_block=$(cat "$W/texture_block")
+else
+    texture_block='[6,6]'
+    if [ "$route" = 64 ] && [ "${DEVICE_RAM:-}" = 1 ]; then
+        texture_block='[8,8]'
+    fi
+    save "$W/texture_block" "$texture_block"
+fi
+case "$texture_block" in '[6,6]'|'[8,8]') ;; *) fail "The staged texture format is invalid." ;; esac
+
 quality=$(cat "$W/texture_quality" 2>/dev/null || printf 'fastest')
 case "$quality" in fastest|medium) ;; *) fail "The staged texture setting is invalid." ;; esac
-resolution=${RESOLUTION:-0.75}
-case "$resolution" in device|0.833|0.75|0.5) ;; *) resolution=0.75 ;; esac
+resolution=${RESOLUTION:-auto}
+case "$resolution" in auto|device|0.833|0.75|0.5) ;; *) resolution=auto ;; esac
 preference "$GAMEDIR/resolution.txt" "$resolution"
 aspect=${ASPECT:-fill}
 case "$aspect" in fill|16:9|4:3|1:1) ;; *) aspect=fill ;; esac
@@ -99,8 +110,23 @@ if [ ! -f "$W/player-ready" ]; then
 fi
 
 if [ ! -f "$W/converted" ]; then
-    step "Converting shaders, settings, audio, and textures"
-    pm convert "$D" --config "$S/convert.json" --set "textures.quality=$quality" ||
+    texture_args=(--set "textures.quality=$quality" --set "textures.block=$texture_block")
+    texture_format="ASTC block $texture_block"
+    if [ "$route" = 64 ] && [ "$texture_block" = '[8,8]' ]; then
+        # Keep the original settings when resuming a conversion started by an older ZIP.
+        if [ ! -e "$D/.pmunity.json" ] && [ ! -e "$D/.pmunity.json.tmp" ]; then
+            sharp_names=$(paste -sd '|' "$S/astc6-sheets.txt") && [ -n "$sharp_names" ] ||
+                fail "The ASTC 6x6 texture list is missing or empty. Extract the port ZIP again."
+            save "$W/sharp_names" "$sharp_names"
+        fi
+        if [ -s "$W/sharp_names" ]; then
+            sharp_names=$(cat "$W/sharp_names")
+            texture_args+=(--set "textures.sharp_names=^($sharp_names)$" --set 'textures.sharp_block=[6,6]')
+            texture_format='ASTC 8x8 with selected weapon, ladder, and text sheets at 6x6'
+        fi
+    fi
+    step "Converting shaders, settings, audio, and full-size textures ($texture_format)"
+    pm convert "$D" --config "$S/convert.json" "${texture_args[@]}" ||
         fail "Conversion stopped. Launch again to resume. See patchlog.txt for details."
     touch "$W/converted"
 fi

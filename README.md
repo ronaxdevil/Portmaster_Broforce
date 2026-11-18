@@ -62,15 +62,18 @@ older than 2.35, the launcher uses the AArch64 Unity runtime. Both routes use th
 game files. This ARM32 process route does not support 32-bit-only handhelds.
 
 The setup questions select ASTC texture compression quality, picture shape, render resolution, and
-the button labels shown in the Controls menu. General artwork uses ASTC 6×6; texture atlases named
-`Font Texture` use ASTC 4×4 to preserve glyph edges. The supplied Linux game data has only empty
-0×0 `Font Texture` placeholders, which the converter skips; pre-rendered text artwork uses the
-general 6×6 setting. Render resolution defaults to **75%**; **50%** reduces GPU work further. The
-picture fills the screen by default, with fixed aspect ratios available.
+the button labels shown in the Controls menu. Textures keep their original dimensions. On 1 GB
+devices running the 64-bit route, setup uses ASTC 8×8 with an exact list of weapon, ladder, and
+baked-text sheets at ASTC 6×6 (see `package/broforce/setup/astc6-sheets.txt`). Automatic render
+resolution uses **50%** (640×360 on a TrimUI Smart Pro), and the launcher caps shadow-map
+resolution at Medium for this profile. Other devices and the 32-bit route use
+ASTC 6×6 for general artwork and **75%** render resolution in automatic mode. Existing installs
+can set `resolution.txt` to `auto`. Changing texture format needs a fresh conversion.
+The picture fills the screen by default, with fixed aspect ratios available.
 
 | Setting file | Values |
 | --- | --- |
-| `resolution.txt` | `0.75`, `0.5`, `0.833`, or `device` |
+| `resolution.txt` | `auto`, `0.5`, `0.75`, `0.833`, or `device` |
 | `aspect.txt` | `fill`, `16:9`, `4:3`, or `1:1` |
 | `buttons.txt` | `nintendo` or `xbox` |
 

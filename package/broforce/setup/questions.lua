@@ -4,7 +4,7 @@
 local questions = {
     {
         id = "TEXTURE_QUALITY",
-        question = "Texture compression quality? Artwork uses ASTC 6x6; Font Texture glyph atlases use 4x4. Sharper takes longer to set up.",
+        question = "Texture compression quality? Sharper takes longer to set up.",
         options = {
             { "fastest", "Fast (recommended)" },
             { "medium", "Sharper" },
@@ -14,8 +14,9 @@ local questions = {
         id = "RESOLUTION",
         question = "Render resolution? Lower settings draw fewer pixels and scale the picture to the screen. Change this later in resolution.txt.",
         options = {
-            { "0.75", "75% of device resolution (recommended)" },
+            { "auto", "Automatic (recommended): 50% on 1 GB ARM64, otherwise 75%" },
             { "0.5", "50% of device resolution" },
+            { "0.75", "75% of device resolution" },
             { "0.833", "83% of device resolution" },
             { "device", "Device resolution" },
         },

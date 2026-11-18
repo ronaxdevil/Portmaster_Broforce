@@ -1,0 +1,128 @@
+00Bro7_Gun_anim
+Agent_Gun_Anim
+Alien Ladder
+AmmoFullBubble
+AmmoPickupBubble
+AmmoText1
+ArmouredMook_Gun_Anim
+ash_brolliams_gun_anim
+ash_brolliams_gun_disarmed_anim
+BABROACUS_gun_anim
+BABROACUS_gun_disarmed_anim
+BLADE_gun_anim
+BLADE_gun_disarmed_anim
+boondockbro_leeroy_gun_anim
+BROBOCOP_gun_anim
+BROBOCOP_gun_anim_Both_Lights
+BROBOCOP_gun_anim_red_Light
+BROBOCOP_gun_anim_red_Light_2
+BROBOCOP_gun_disarmed_anim
+Broc_gun_anim
+Broc_gun_disarmed_anim
+BROCEWILLIS_gun_anim
+BROCEWILLIS_gun_disarmed_anim
+Brochete_Gun_anim
+Brocketeer_gun_anim
+Broden_gun_anim
+BRODREAD_gun_anim
+BRODREAD_gun_disarmed_anim
+Broffy_gun_anim
+BroGummer_gun_anim
+BroLee_gun_anim
+BroMax_gun_anim
+brominator_gun_anim
+brominator_gun_anim Metal
+brominator_gun_disarmed_anim
+BROMMANDO_gun_anim
+BROMMANDO_gun_disarmed_anim
+BRONAN_gun_anim 1
+BrondleFly_gun_anim
+BrondleFly_gun_disarmed_anim
+BroneyRoss_gun_anim
+Broniversal Soldier Gun Anim
+Broniversal Soldier Gun Disarmed Anim
+BronnarJensen_gun_anim
+BRONONAMOUS_gun_anim
+BRONONAMOUS_gun_disarmed_anim
+BROVEHEART_gun_anim
+BROVEHEART_gun_anim_disarmed
+CherryBroling Gun Anim
+ChevBrolios Gun
+CHUCKBRO_gun_anim
+CHUCKBRO_gun_disarmed_anim
+CitizenDesert_Gun_anim-3
+CitizenDesert_Gun_anim-6
+CitizenDesert_Gun_anim-7
+CitizenDesert_Gun_anim-8
+CitizenDesert_Gun_anim-9
+Col James Broddock gun_anim
+Col James Broddock gun_anim_cooking
+Col James Broddock_gun_disarmed_anim
+ConradBronebanks_gun_anim
+DemolitionBro_gun_anim
+denizenGun_anim
+Desperabro_gun_anim
+DirtyHarry_Gun_anim
+DroneGun_anim
+DroneSawGun_anim
+Ellen Ripbro Gun Anim
+ExperimentalFrontGun
+ExperimentalFrontGunDestroyed
+FreeLifeBubble
+FreeLifeText2
+HaleTheBro_gun_anim
+helicopter_ropeladder
+HelicopterBoss_chaingun_anim
+HelicopterBoss_Sidegun
+HudsonOutline_0
+HudsonOutline_3D
+indiannabrones_gun_anim
+indiannabrones_gun_disarmed_anim
+ladder
+ladder2
+ladderTopAlone
+ladderTopMiddle
+ladderV2
+LeeBroxmass_gun_anim
+MCBROVER_gun_anim
+MCBROVER_gun_disarmed_anim
+mechMook_chaingun_back_anim
+mechMook_chaingun_front_anim
+mook_gun_anim
+mook_GunPlacement_Gun
+mook_Kopter_Chaingun
+mook_tank_RotateMiniGun
+mook_tank_RotateMiniGunBackground
+mookBazooka_gun_anim
+mookbig_gun_anim
+mookbigElite_gun_anim
+mookGeneral_gun_anim
+mookhellbig_gun_anim
+mookscientist_gun_anim
+mookundead_gun_anim
+neobro_gun_anim
+NumbersLives
+Predabro_gun_anim
+Predabro_Stealth_gun_anim
+Promoted Bubble 2
+RAMBRO_gun_anim
+Rocket Gun
+ScorpionBro_Gun
+Seagal_Gun_anim
+SkinnlessMook_gun_anim
+SNAKEBROSKIN_gun_anim
+SNAKEBROSKIN_gun_disarmed_anim
+TankBro_gun_anim
+TankBroTank_Gun_Anim
+The Brofessional gun_anim
+The Brofessional_gun_disarmed_anim
+The Brolander_gun_anim
+TheBrode_gun_anim
+Time Bro Van Damme Gun Anim
+TollBroad_gun_anim
+TrentBroser_gun_anim
+universal_jerk_gun_rocket_anim
+villagerGun_anim
+white_8bitWonder_font
+woodenladder
+Xebro_gun_anim

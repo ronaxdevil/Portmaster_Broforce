@@ -60,7 +60,7 @@ fi
 
 if [ ! -s "$root/.ready" ]; then
     echo "Preparing Broforce. Supplied game files are removed after successful setup."
-    export DEVICE_ARCH controlfolder DISPLAY_WIDTH DISPLAY_HEIGHT
+    export DEVICE_ARCH DEVICE_RAM controlfolder DISPLAY_WIDTH DISPLAY_HEIGHT
     export PATCHER_FILE="$GAMEDIR/setup/patchscript" PATCHER_QUESTIONS="$GAMEDIR/setup/questions.lua"
     export PATCHER_GAME=Broforce PATCHER_TIME="Several minutes or longer"
     export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
@@ -104,7 +104,13 @@ if [ "$buttons" = nintendo ] && [ ! -f "$root/.prompt-labels" ] && ! ./setup/pat
 fi
 
 resolution=$(cat "$GAMEDIR/resolution.txt" 2>/dev/null)
-case "$resolution" in device|0.833|0.75|0.5) ;; *) resolution=0.75 ;; esac
+case "$resolution" in device|0.833|0.75|0.5) ;; *) resolution=auto ;; esac
+if [ "$route" = 64 ] && [ "${DEVICE_RAM:-}" = 1 ]; then
+    export UA_QUALITY="shadow_resolution=1"
+    [ "$resolution" != auto ] || resolution=0.5
+elif [ "$resolution" = auto ]; then
+    resolution=0.75
+fi
 unset UA_RENDER_SIZE
 if [ "$resolution" != device ]; then
     export UA_RENDER_SCALE="$resolution"

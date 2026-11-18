@@ -27,18 +27,21 @@ the supplied files remain in place; launch Broforce again to resume. See
 output.
 
 Setup asks about ASTC texture compression quality, picture shape, render resolution, and face-button
-labels in the Controls menu. General artwork uses ASTC 6×6; texture atlases named `Font Texture`
-use ASTC 4×4 to preserve glyph edges. The current Linux game data contains only empty 0×0
-`Font Texture` placeholders, so the converter skips them; pre-rendered text artwork stays on the
-general 6×6 setting. **75%** render resolution is the default. **50%** reduces the work for
-the GPU further. The picture fills the screen by default, with fixed aspect ratios available if
-you prefer black bars. Physical controls work by position in either button-label mode.
+labels in the Controls menu. Textures keep their original dimensions. On 1 GB devices running
+the 64-bit route, setup uses ASTC 6×6 for selected weapon, ladder, and baked-text sheets and
+ASTC 8×8 for other eligible textures. Other profiles use ASTC 6×6 for general artwork.
+Automatic render resolution uses **50%** (640×360 on a TrimUI Smart Pro) on 1 GB devices running
+the 64-bit route and **75%** elsewhere. The 1 GB 64-bit route also caps shadow-map resolution
+at Medium. To use the automatic render resolution on an existing installation, put
+`auto` in `resolution.txt`. The texture format is set during setup and needs a fresh conversion
+of the supplied game data to change. The picture fills the screen by default, with fixed aspect ratios
+available if you prefer black bars. Physical controls work by position in either button-label mode.
 
 You can edit these text files in `ports/broforce/` after setup.
 
 | File | Values |
 | --- | --- |
-| `resolution.txt` | `0.75`, `0.5`, `0.833`, or `device` |
+| `resolution.txt` | `auto`, `0.5`, `0.75`, `0.833`, or `device` |
 | `aspect.txt` | `fill`, `16:9`, `4:3`, or `1:1` |
 | `buttons.txt` | `nintendo` or `xbox` |
 
